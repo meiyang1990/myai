@@ -51,6 +51,7 @@ from source_reader import SourceReader
 from comment_generator import CommentGenerator
 from comment_writer import CommentWriter
 from project_context import ProjectContextAnalyzer
+from progress_tracker import ProgressTracker
 
 
 def parse_args():
@@ -136,6 +137,13 @@ def parse_args():
         action="store_true",
         default=False,
         help="跳过项目上下文分析，使用无上下文模式生成注释（兼容旧行为）",
+    )
+
+    parser.add_argument(
+        "--reset-progress",
+        action="store_true",
+        default=False,
+        help="重置进度记录，清除所有断点恢复数据，从头处理所有文件",
     )
 
     args = parser.parse_args()
@@ -229,8 +237,56 @@ def do_context_only(project_path, refresh):
         return False
 
 
+def _mark_completed_dirs(source_files, tracker):
+    """
+    自底向上推导并标记已完成的目录
+
+    逻辑：收集所有文件所属的目录路径，对每个目录检查其下所有文件是否都已完成，
+    如果是则标记该目录为已完成。从最深层目录开始检查。
+
+    Args:
+        source_files (list): SourceFile 对象列表
+        tracker (ProgressTracker): 进度跟踪器实例
+    """
+    # 收集所有文件的目录路径
+    dir_files = {}  # dir_rel_path -> [file_rel_path, ...]
+    for sf in source_files:
+        dir_path = os.path.dirname(sf.rel_path)
+        if dir_path not in dir_files:
+            dir_files[dir_path] = []
+        dir_files[dir_path].append(sf.rel_path)
+
+    # 按目录深度从深到浅排序
+    sorted_dirs = sorted(dir_files.keys(), key=lambda d: d.count(os.sep), reverse=True)
+
+    for dir_path in sorted_dirs:
+        if not dir_path:
+            continue  # 跳过根目录
+
+        if tracker.is_dir_done(dir_path):
+            continue  # 已标记
+
+        # 检查该目录下所有文件是否都已完成
+        all_files_done = all(
+            tracker.is_file_done(fp) for fp in dir_files[dir_path]
+        )
+        if not all_files_done:
+            continue
+
+        # 检查该目录下所有子目录是否都已完成
+        all_subdirs_done = True
+        for other_dir in dir_files.keys():
+            if other_dir != dir_path and other_dir.startswith(dir_path + os.sep):
+                if not tracker.is_dir_done(other_dir):
+                    all_subdirs_done = False
+                    break
+
+        if all_files_done and all_subdirs_done:
+            tracker.mark_dir_done(dir_path)
+
+
 def do_generate(project_path, output_dir, overwrite, copy_others,
-                use_context=True, refresh_context=False):
+                use_context=True, refresh_context=False, reset_progress=False):
     """
     执行完整的注释生成流程
 
@@ -241,6 +297,7 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
         copy_others (bool): 是否复制非源码文件
         use_context (bool): 是否使用项目上下文分析（默认 True）
         refresh_context (bool): 是否强制刷新项目上下文（默认 False）
+        reset_progress (bool): 是否重置进度记录（默认 False）
     """
     print("=" * 50)
     print("智能代码注释生成器")
@@ -260,11 +317,16 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
         sys.exit(1)
     print("  配置校验通过 ✓")
 
+    # 初始化进度跟踪器
+    tracker = ProgressTracker(project_path)
+    if reset_progress:
+        tracker.reset()
+
     # 第二步：扫描项目
     step += 1
     print("\n[%d/%d] 扫描项目源码..." % (step, total_steps))
     reader = SourceReader(project_path)
-    source_files = reader.scan()
+    source_files = reader.scan(progress_tracker=tracker)
 
     if not source_files:
         print("  未发现可处理的源码文件，退出。")
@@ -296,9 +358,17 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
 
     total = len(source_files)
     start_time = time.time()
+    skipped_by_progress = 0
 
     for idx, sf in enumerate(source_files, 1):
         progress = "[%d/%d]" % (idx, total)
+
+        # 断点恢复：检查文件是否已处理过
+        if tracker.is_file_done(sf.rel_path):
+            skipped_by_progress += 1
+            print("\n%s [跳过-已处理] %s" % (progress, sf.rel_path))
+            continue
+
         print("\n%s 处理: %s (%s, %d bytes)" % (
             progress, sf.rel_path, sf.language, sf.size
         ))
@@ -310,6 +380,8 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
             # 写入文件
             success = writer.write_file(sf, commented_code)
             if success:
+                # 标记文件处理完成
+                tracker.mark_file_done(sf.rel_path)
                 print("  → 注释生成并写入成功 ✓")
             else:
                 print("  → 写入失败 ✗")
@@ -318,6 +390,12 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
             print("  → 注释生成失败，跳过 ✗")
 
     elapsed = time.time() - start_time
+
+    # 目录级断点标记：自底向上推导已完成的目录
+    _mark_completed_dirs(source_files, tracker)
+
+    if skipped_by_progress > 0:
+        print("\n[断点恢复] 本次跳过 %d 个已处理文件" % skipped_by_progress)
 
     # 最后一步：复制非源码文件（可选）
     step += 1
@@ -383,6 +461,7 @@ def main():
         args.copy_others,
         use_context=not args.no_context,
         refresh_context=args.refresh_context,
+        reset_progress=args.reset_progress,
     )
 
 

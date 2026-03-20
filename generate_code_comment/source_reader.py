@@ -214,7 +214,7 @@ class SourceReader(object):
         except (IOError, OSError):
             return None
 
-    def _scan_directory(self, dir_path, rel_dir, result):
+    def _scan_directory(self, dir_path, rel_dir, result, progress_tracker=None):
         """
         递归扫描单个目录：先按字典序处理源码文件，再按字典序递归子目录
 
@@ -222,7 +222,13 @@ class SourceReader(object):
             dir_path (str): 当前目录的绝对路径
             rel_dir (str): 当前目录相对于项目根的相对路径（根目录为空字符串）
             result (list): 收集 SourceFile 对象的结果列表（原地追加）
+            progress_tracker: ProgressTracker 实例，用于目录级断点跳过（可选）
         """
+        # 目录级断点恢复：如果该目录已全部处理完毕，直接跳过
+        if progress_tracker is not None and rel_dir and progress_tracker.is_dir_done(rel_dir):
+            print("[跳过-目录已完成] %s" % rel_dir)
+            return
+
         try:
             entries = os.listdir(dir_path)
         except OSError:
@@ -291,14 +297,18 @@ class SourceReader(object):
             if self._should_ignore_dir(dname, sub_rel):
                 continue
             sub_abs = os.path.join(dir_path, dname)
-            self._scan_directory(sub_abs, sub_rel, result)
+            self._scan_directory(sub_abs, sub_rel, result, progress_tracker)
 
-    def scan(self):
+    def scan(self, progress_tracker=None):
         """
         扫描项目目录，返回所有可处理的源码文件列表
 
         采用自定义递归遍历：每层目录先按文件名字典序处理源码文件，
         再按目录名字典序递归进入子目录，确保处理顺序确定且可预测。
+        支持传入进度跟踪器以跳过已完成的目录。
+
+        Args:
+            progress_tracker: ProgressTracker 实例，用于目录级断点跳过（可选）
 
         Returns:
             list[SourceFile]: 源码文件对象列表（按文件优先+字典序排列）
@@ -312,7 +322,7 @@ class SourceReader(object):
             )
 
         source_files = []
-        self._scan_directory(self.project_root, "", source_files)
+        self._scan_directory(self.project_root, "", source_files, progress_tracker)
 
         print("[扫描完成] 共发现 %d 个源码文件" % len(source_files))
         return source_files
