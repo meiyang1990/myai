@@ -53,7 +53,7 @@
 
 ### Requirement: 文件过滤
 
-系统 SHALL 自动过滤非源码文件（构建产物、依赖目录、配置文件等），只保留需要添加注释的源码文件。
+系统 SHALL 自动过滤非源码文件（构建产物、依赖目录、配置文件等）和单元测试代码文件，只保留需要添加注释的业务源码文件。
 
 #### Scenario: 过滤构建产物
 
@@ -69,6 +69,18 @@
 
 - **WHEN** 源码文件大小超过 MAX_FILE_SIZE 阈值（默认 1MB）
 - **THEN** 打印跳过提示并忽略该文件
+
+#### Scenario: 过滤单元测试文件
+
+- **WHEN** 扫描到符合单元测试文件命名规则的文件
+- **AND** 文件名匹配以下模式之一：`Test*.java`、`*Test.java`、`*Tests.java`、`*Spec.java`、`test_*.py`、`*_test.py`、`*_test.go`、`*.test.js`、`*.test.ts`、`*.test.tsx`、`*.spec.js`、`*.spec.ts`、`*.spec.tsx`
+- **THEN** 跳过该文件，不纳入注释处理范围
+- **AND** 打印跳过提示说明原因为"测试文件"
+
+#### Scenario: 过滤测试目录
+
+- **WHEN** 扫描到名称为 `test`、`tests`、`__tests__`、`spec`、`specs` 的目录
+- **THEN** 跳过该目录及其所有子文件，不纳入注释处理范围
 
 ---
 

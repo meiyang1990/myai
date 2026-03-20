@@ -93,7 +93,59 @@ DEFAULT_IGNORE_DIRS = {
     ".nyc_output",
     "bin",
     "obj",
+    # 测试目录（Task 2.2）
+    "test",
+    "tests",
+    "__tests__",
+    "spec",
+    "specs",
 }
+
+# 单元测试文件命名匹配模式列表（Task 2.1）
+# 使用 fnmatch 风格的通配符模式，覆盖主流语言的测试文件命名规范
+TEST_FILE_PATTERNS = [
+    # Java
+    "Test*.java",
+    "*Test.java",
+    "*Tests.java",
+    "*TestCase.java",
+    "*Spec.java",
+    # Python
+    "test_*.py",
+    "*_test.py",
+    # Go
+    "*_test.go",
+    # JavaScript / TypeScript
+    "*.test.js",
+    "*.test.ts",
+    "*.test.tsx",
+    "*.test.jsx",
+    "*.spec.js",
+    "*.spec.ts",
+    "*.spec.tsx",
+    "*.spec.jsx",
+    # Kotlin
+    "*Test.kt",
+    "*Tests.kt",
+    "*Spec.kt",
+    # C# (.NET)
+    "*Test.cs",
+    "*Tests.cs",
+    # Ruby
+    "*_spec.rb",
+    "test_*.rb",
+    # Rust
+    "*_test.rs",
+    # Swift
+    "*Tests.swift",
+    "*Test.swift",
+    # Scala
+    "*Spec.scala",
+    "*Test.scala",
+    # PHP
+    "*Test.php",
+    "*_test.php",
+]
 
 # 默认需要忽略的文件模式
 DEFAULT_IGNORE_FILES = {

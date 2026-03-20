@@ -12,12 +12,14 @@
 
 import os
 import io
+import fnmatch
 
 from config import (
     LANGUAGE_EXTENSIONS,
     DEFAULT_IGNORE_DIRS,
     DEFAULT_IGNORE_FILES,
     MAX_FILE_SIZE,
+    TEST_FILE_PATTERNS,
 )
 
 # 尝试导入 pathspec 用于解析 .gitignore，如果不可用则降级处理
@@ -167,6 +169,12 @@ class SourceReader(object):
         # 以 . 开头的隐藏文件
         if file_name.startswith("."):
             return True
+
+        # 检查是否为单元测试文件（Task 2.3 + 2.4）
+        for pattern in TEST_FILE_PATTERNS:
+            if fnmatch.fnmatch(file_name, pattern):
+                print("[跳过] 测试文件: %s" % rel_file_path)
+                return True
 
         # 检查 .gitignore 规则
         if self.gitignore_spec is not None:
