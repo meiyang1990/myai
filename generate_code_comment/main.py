@@ -3,12 +3,13 @@
 智能代码注释生成器 - 主程序入口
 
 基于 LangChain + 火山引擎大模型，自动为源码文件生成高质量中文注释。
+支持项目上下文分析，让大模型理解项目全局架构后生成更有深度的注释。
 
 使用方式：
     python main.py <项目路径> [选项]
 
 示例：
-    # 基本用法：扫描项目并生成注释到新目录
+    # 基本用法：扫描项目并生成注释到新目录（自动分析项目上下文）
     python main.py /path/to/your/project
 
     # 指定输出目录
@@ -22,6 +23,15 @@
 
     # 仅扫描不生成（预览将处理哪些文件）
     python main.py /path/to/your/project --scan-only
+
+    # 强制刷新项目上下文概要
+    python main.py /path/to/your/project --refresh-context
+
+    # 仅生成项目上下文概要（不执行注释生成）
+    python main.py /path/to/your/project --context-only
+
+    # 跳过项目上下文分析（兼容旧行为）
+    python main.py /path/to/your/project --no-context
 """
 
 from __future__ import print_function
@@ -40,6 +50,7 @@ from config import validate_config
 from source_reader import SourceReader
 from comment_generator import CommentGenerator
 from comment_writer import CommentWriter
+from project_context import ProjectContextAnalyzer
 
 
 def parse_args():
@@ -54,11 +65,14 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python main.py /path/to/project              # 生成注释到新目录
+  python main.py /path/to/project              # 生成注释到新目录（自动分析上下文）
   python main.py /path/to/project -o ./output   # 指定输出目录
   python main.py /path/to/project --overwrite   # 覆盖原文件
   python main.py --test-api                     # 测试 API 连接
   python main.py /path/to/project --scan-only   # 仅扫描预览
+  python main.py /path/to/project --context-only          # 仅生成上下文概要
+  python main.py /path/to/project --refresh-context        # 强制刷新上下文
+  python main.py /path/to/project --no-context             # 跳过上下文分析
         """,
     )
 
@@ -101,6 +115,27 @@ def parse_args():
         action="store_true",
         default=False,
         help="在输出模式下，同时复制非源码文件到输出目录",
+    )
+
+    parser.add_argument(
+        "--refresh-context",
+        action="store_true",
+        default=False,
+        help="强制重新分析项目，刷新项目上下文概要缓存",
+    )
+
+    parser.add_argument(
+        "--context-only",
+        action="store_true",
+        default=False,
+        help="仅生成项目上下文概要并存储，不执行注释生成",
+    )
+
+    parser.add_argument(
+        "--no-context",
+        action="store_true",
+        default=False,
+        help="跳过项目上下文分析，使用无上下文模式生成注释（兼容旧行为）",
     )
 
     args = parser.parse_args()
@@ -158,7 +193,44 @@ def do_scan_only(project_path):
             ))
 
 
-def do_generate(project_path, output_dir, overwrite, copy_others):
+def do_context_only(project_path, refresh):
+    """
+    仅生成项目上下文概要（不执行注释生成）
+
+    Args:
+        project_path (str): 项目根目录路径
+        refresh (bool): 是否强制刷新
+    """
+    print("=" * 50)
+    print("项目上下文分析")
+    print("=" * 50)
+
+    # 校验配置
+    is_valid, errors = validate_config()
+    if not is_valid:
+        print("\n[配置错误]")
+        for err in errors:
+            print("  - %s" % err)
+        return False
+
+    print("\n正在分析项目: %s" % project_path)
+    analyzer = ProjectContextAnalyzer(project_path)
+    summary = analyzer.get_context(force_refresh=refresh)
+
+    if summary:
+        print("\n" + "=" * 50)
+        print("项目概要内容：")
+        print("=" * 50)
+        print(summary)
+        print("\n" + "=" * 50)
+        return True
+    else:
+        print("\n[错误] 未能生成项目概要")
+        return False
+
+
+def do_generate(project_path, output_dir, overwrite, copy_others,
+                use_context=True, refresh_context=False):
     """
     执行完整的注释生成流程
 
@@ -167,13 +239,19 @@ def do_generate(project_path, output_dir, overwrite, copy_others):
         output_dir (str or None): 输出目录
         overwrite (bool): 是否覆盖原文件
         copy_others (bool): 是否复制非源码文件
+        use_context (bool): 是否使用项目上下文分析（默认 True）
+        refresh_context (bool): 是否强制刷新项目上下文（默认 False）
     """
     print("=" * 50)
     print("智能代码注释生成器")
     print("=" * 50)
 
+    total_steps = 5 if use_context else 4
+    step = 0
+
     # 第一步：校验配置
-    print("\n[1/4] 校验配置...")
+    step += 1
+    print("\n[%d/%d] 校验配置..." % (step, total_steps))
     is_valid, errors = validate_config()
     if not is_valid:
         print("[配置错误]")
@@ -183,7 +261,8 @@ def do_generate(project_path, output_dir, overwrite, copy_others):
     print("  配置校验通过 ✓")
 
     # 第二步：扫描项目
-    print("\n[2/4] 扫描项目源码...")
+    step += 1
+    print("\n[%d/%d] 扫描项目源码..." % (step, total_steps))
     reader = SourceReader(project_path)
     source_files = reader.scan()
 
@@ -193,9 +272,26 @@ def do_generate(project_path, output_dir, overwrite, copy_others):
 
     print(reader.get_project_summary(source_files))
 
-    # 第三步：生成注释
-    print("\n[3/4] 调用大模型生成注释...")
-    generator = CommentGenerator()
+    # 第三步（可选）：项目上下文分析
+    project_context = None
+    if use_context:
+        step += 1
+        print("\n[%d/%d] 分析项目上下文..." % (step, total_steps))
+        try:
+            analyzer = ProjectContextAnalyzer(project_path)
+            project_context = analyzer.get_context(force_refresh=refresh_context)
+            if project_context:
+                print("  项目上下文加载成功 ✓")
+            else:
+                print("  项目上下文不可用，将以无上下文模式继续")
+        except Exception as e:
+            print("  [警告] 项目上下文分析失败: %s" % str(e))
+            print("  将以无上下文模式继续")
+
+    # 第 N 步：生成注释
+    step += 1
+    print("\n[%d/%d] 调用大模型生成注释..." % (step, total_steps))
+    generator = CommentGenerator(project_context=project_context)
     writer = CommentWriter(project_path, output_dir, overwrite)
 
     total = len(source_files)
@@ -223,13 +319,14 @@ def do_generate(project_path, output_dir, overwrite, copy_others):
 
     elapsed = time.time() - start_time
 
-    # 第四步：复制非源码文件（可选）
+    # 最后一步：复制非源码文件（可选）
+    step += 1
     if copy_others and not overwrite:
-        print("\n[4/4] 复制非源码文件...")
+        print("\n[%d/%d] 复制非源码文件..." % (step, total_steps))
         writer.copy_non_source_files(source_files)
         print("  复制完成 ✓")
     else:
-        print("\n[4/4] 跳过非源码文件复制")
+        print("\n[%d/%d] 跳过非源码文件复制" % (step, total_steps))
 
     # 输出统计
     print("\n" + writer.get_summary())
@@ -260,6 +357,11 @@ def main():
         do_scan_only(project_path)
         return
 
+    # 仅生成上下文模式
+    if args.context_only:
+        success = do_context_only(project_path, refresh=args.refresh_context)
+        sys.exit(0 if success else 1)
+
     # 覆盖模式下给出警告
     if args.overwrite:
         print("\n⚠️  警告: 覆盖模式将直接修改原始源码文件！")
@@ -273,8 +375,15 @@ def main():
             print("已取消操作。")
             return
 
-    # 执行注释生成
-    do_generate(project_path, args.output, args.overwrite, args.copy_others)
+    # 执行注释生成（根据 --no-context 决定是否使用上下文）
+    do_generate(
+        project_path,
+        args.output,
+        args.overwrite,
+        args.copy_others,
+        use_context=not args.no_context,
+        refresh_context=args.refresh_context,
+    )
 
 
 if __name__ == "__main__":

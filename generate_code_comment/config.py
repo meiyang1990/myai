@@ -114,6 +114,24 @@ DEFAULT_IGNORE_FILES = {
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(1024 * 1024)))
 
 
+# ========== 项目上下文分析配置 ==========
+
+# 智能采样文件数量上限（默认 20 个）
+CONTEXT_SAMPLE_FILE_LIMIT = int(os.getenv("CONTEXT_SAMPLE_FILE_LIMIT", "20"))
+
+# 采样文件的总字符预算（默认约 8000 字符 ≈ 4000 token）
+CONTEXT_CHAR_BUDGET = int(os.getenv("CONTEXT_CHAR_BUDGET", "8000"))
+
+# 单个采样文件截取的最大行数（默认 200 行）
+CONTEXT_FILE_MAX_LINES = int(os.getenv("CONTEXT_FILE_MAX_LINES", "200"))
+
+# 项目概要缓存有效期（天），超过后提示用户刷新（默认 7 天）
+CONTEXT_CACHE_EXPIRE_DAYS = float(os.getenv("CONTEXT_CACHE_EXPIRE_DAYS", "7"))
+
+# 项目上下文缓存目录名称
+CONTEXT_CACHE_DIR_NAME = os.getenv("CONTEXT_CACHE_DIR_NAME", ".code_context")
+
+
 # ========== 注释风格配置 ==========
 
 # 各编程语言的注释格式模板
