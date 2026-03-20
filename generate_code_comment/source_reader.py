@@ -214,12 +214,94 @@ class SourceReader(object):
         except (IOError, OSError):
             return None
 
+    def _scan_directory(self, dir_path, rel_dir, result):
+        """
+        递归扫描单个目录：先按字典序处理源码文件，再按字典序递归子目录
+
+        Args:
+            dir_path (str): 当前目录的绝对路径
+            rel_dir (str): 当前目录相对于项目根的相对路径（根目录为空字符串）
+            result (list): 收集 SourceFile 对象的结果列表（原地追加）
+        """
+        try:
+            entries = os.listdir(dir_path)
+        except OSError:
+            return
+
+        # 分离文件和子目录
+        files = []
+        dirs = []
+        for entry in entries:
+            full_path = os.path.join(dir_path, entry)
+            if os.path.isfile(full_path):
+                files.append(entry)
+            elif os.path.isdir(full_path):
+                dirs.append(entry)
+
+        # 按字典序排序
+        files.sort()
+        dirs.sort()
+
+        # 先处理当前目录的源码文件（字典序）
+        for fname in files:
+            rel_file = os.path.join(rel_dir, fname) if rel_dir else fname
+
+            # 判断是否需要忽略
+            if self._should_ignore_file(fname, rel_file):
+                continue
+
+            # 检测编程语言
+            language = self._detect_language(fname)
+            if language is None:
+                continue
+
+            abs_file = os.path.join(dir_path, fname)
+
+            # 检查文件大小
+            try:
+                file_size = os.path.getsize(abs_file)
+            except OSError:
+                continue
+
+            if file_size > MAX_FILE_SIZE:
+                print("[跳过] 文件过大(%d bytes): %s" % (file_size, rel_file))
+                continue
+
+            if file_size == 0:
+                continue
+
+            # 读取文件内容
+            content = self._read_file_content(abs_file)
+            if content is None:
+                print("[跳过] 无法读取: %s" % rel_file)
+                continue
+
+            source_file = SourceFile(
+                abs_path=abs_file,
+                rel_path=rel_file,
+                language=language,
+                content=content,
+                size=file_size,
+            )
+            result.append(source_file)
+
+        # 再按字典序递归子目录
+        for dname in dirs:
+            sub_rel = os.path.join(rel_dir, dname) if rel_dir else dname
+            if self._should_ignore_dir(dname, sub_rel):
+                continue
+            sub_abs = os.path.join(dir_path, dname)
+            self._scan_directory(sub_abs, sub_rel, result)
+
     def scan(self):
         """
         扫描项目目录，返回所有可处理的源码文件列表
 
+        采用自定义递归遍历：每层目录先按文件名字典序处理源码文件，
+        再按目录名字典序递归进入子目录，确保处理顺序确定且可预测。
+
         Returns:
-            list[SourceFile]: 源码文件对象列表
+            list[SourceFile]: 源码文件对象列表（按文件优先+字典序排列）
 
         Raises:
             ValueError: 当项目根目录不存在或不可访问时
@@ -230,66 +312,7 @@ class SourceReader(object):
             )
 
         source_files = []
-
-        for dirpath, dirnames, filenames in os.walk(self.project_root):
-            # 计算当前目录相对于项目根目录的路径
-            rel_dir = os.path.relpath(dirpath, self.project_root)
-            if rel_dir == ".":
-                rel_dir = ""
-
-            # 过滤需要忽略的子目录（原地修改 dirnames 可阻止 os.walk 进入）
-            filtered_dirs = []
-            for d in dirnames:
-                sub_rel = os.path.join(rel_dir, d) if rel_dir else d
-                if not self._should_ignore_dir(d, sub_rel):
-                    filtered_dirs.append(d)
-            dirnames[:] = filtered_dirs
-
-            # 处理当前目录中的文件
-            for fname in filenames:
-                rel_file = os.path.join(rel_dir, fname) if rel_dir else fname
-
-                # 判断是否需要忽略
-                if self._should_ignore_file(fname, rel_file):
-                    continue
-
-                # 检测编程语言
-                language = self._detect_language(fname)
-                if language is None:
-                    continue
-
-                abs_file = os.path.join(dirpath, fname)
-
-                # 检查文件大小
-                try:
-                    file_size = os.path.getsize(abs_file)
-                except OSError:
-                    continue
-
-                if file_size > MAX_FILE_SIZE:
-                    print("[跳过] 文件过大(%d bytes): %s" % (file_size, rel_file))
-                    continue
-
-                if file_size == 0:
-                    continue
-
-                # 读取文件内容
-                content = self._read_file_content(abs_file)
-                if content is None:
-                    print("[跳过] 无法读取: %s" % rel_file)
-                    continue
-
-                source_file = SourceFile(
-                    abs_path=abs_file,
-                    rel_path=rel_file,
-                    language=language,
-                    content=content,
-                    size=file_size,
-                )
-                source_files.append(source_file)
-
-        # 按相对路径排序，保证输出顺序稳定
-        source_files.sort(key=lambda sf: sf.rel_path)
+        self._scan_directory(self.project_root, "", source_files)
 
         print("[扫描完成] 共发现 %d 个源码文件" % len(source_files))
         return source_files
