@@ -1,0 +1,180 @@
+# -*- coding: utf-8 -*-
+"""
+注释生成模块 - 基于 LangChain + 火山引擎大模型生成中文代码注释
+
+本模块负责：
+1. 初始化 LangChain ChatOpenAI 对接火山引擎 API
+2. 构建注释生成的 Prompt 模板
+3. 将整个源码文件一次性提交给大模型，生成带有中文注释的完整代码
+4. 解析大模型返回结果，提取带注释的代码
+"""
+
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain.schema import HumanMessage, SystemMessage
+
+from config import (
+    VOLCENGINE_API_KEY,
+    VOLCENGINE_API_BASE,
+    VOLCENGINE_MODEL_ENDPOINT,
+    TEMPERATURE,
+    MAX_TOKENS,
+    COMMENT_STYLES,
+)
+
+
+# ========== Prompt 模板定义 ==========
+
+SYSTEM_PROMPT = """你是一位资深的代码审阅专家和技术文档工程师。你的任务是为源代码添加高质量的中文注释。
+
+## 注释原则
+
+1. **只添加注释，不修改任何代码逻辑**：你返回的代码必须与原始代码完全一致，只是增加了注释。
+2. **使用简体中文**：所有注释内容统一使用简体中文。
+3. **注释层级**：
+   - **文件级注释**：在文件开头添加，说明文件所属模块、核心职责和主要功能。
+   - **类级注释**：在类定义前添加，描述类的设计目的、核心职责和关键协作者。
+   - **方法/函数级注释**：在方法定义前添加，解释功能、参数含义、返回值和异常情况。
+   - **行内注释**：针对复杂逻辑、算法、非直观代码添加解释性注释。
+4. **避免冗余注释**：不要对显而易见的代码添加注释（如 `getName()` 不需要注释"获取名称"）。
+5. **注释要体现业务含义**：不仅翻译代码表面逻辑，还要结合上下文说明业务含义。
+6. **遵循语言注释规范**：根据编程语言使用对应的标准注释格式（如 Java 用 Javadoc、Python 用 Docstring 等）。
+
+## 输出要求
+
+- 直接输出添加了注释的完整源代码。
+- 不要添加任何额外的解释文字或 markdown 格式标记。
+- 不要用 ```代码块``` 包裹代码。
+- 保持原始代码的缩进、空行和格式完全不变。
+- 确保输出的代码可以直接编译/运行。"""
+
+
+HUMAN_PROMPT_TEMPLATE = """请为以下 {language} 源代码文件添加中文注释。
+
+文件路径：{file_path}
+
+源代码内容：
+{source_code}"""
+
+
+class CommentGenerator(object):
+    """
+    注释生成器 - 使用 LangChain 对接火山引擎大模型生成代码注释
+
+    工作流程：
+    1. 通过 ChatOpenAI（兼容模式）连接火山引擎大模型 API
+    2. 构建包含系统指令和源码内容的 Prompt
+    3. 将整个文件一次性发送给大模型
+    4. 获取带有中文注释的完整代码并返回
+    """
+
+    def __init__(self):
+        """
+        初始化注释生成器，建立与火山引擎大模型的连接
+        """
+        # 使用 ChatOpenAI 通过兼容 OpenAI 协议接入火山引擎
+        self.llm = ChatOpenAI(
+            model=VOLCENGINE_MODEL_ENDPOINT,
+            openai_api_key=VOLCENGINE_API_KEY,
+            openai_api_base=VOLCENGINE_API_BASE,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS,
+        )
+
+        # 构建 Chat Prompt 模板
+        self.prompt = ChatPromptTemplate.from_messages([
+            SystemMessagePromptTemplate.from_template(SYSTEM_PROMPT),
+            HumanMessagePromptTemplate.from_template(HUMAN_PROMPT_TEMPLATE),
+        ])
+
+    def generate_comment(self, source_file):
+        """
+        为单个源码文件生成中文注释
+
+        将整个源码文件内容一次性提交给大模型，由大模型返回添加了注释的完整代码。
+
+        Args:
+            source_file: SourceFile 对象，包含文件路径、语言类型和源码内容
+
+        Returns:
+            str or None: 添加了中文注释的完整代码内容。
+                         如果生成失败则返回 None。
+        """
+        language = source_file.language
+        file_path = source_file.rel_path
+        source_code = source_file.content
+
+        try:
+            # 格式化 Prompt，填充变量
+            messages = self.prompt.format_messages(
+                language=language,
+                file_path=file_path,
+                source_code=source_code,
+            )
+
+            # 调用大模型生成注释
+            response = self.llm.invoke(messages)
+
+            # 提取生成的代码内容
+            commented_code = response.content
+
+            # 后处理：去除大模型可能多余包裹的 markdown 代码块标记
+            commented_code = self._clean_response(commented_code)
+
+            return commented_code
+
+        except Exception as e:
+            print("[错误] 生成注释失败 (%s): %s" % (file_path, str(e)))
+            return None
+
+    def _clean_response(self, text):
+        """
+        清理大模型返回内容中可能包含的 markdown 代码块标记
+
+        大模型有时会在返回结果中自动添加 ```language ... ``` 包裹，
+        这里将其去除，只保留纯代码内容。
+
+        Args:
+            text (str): 大模型返回的原始文本
+
+        Returns:
+            str: 清理后的纯代码文本
+        """
+        if text is None:
+            return text
+
+        text = text.strip()
+
+        # 检查是否以 ``` 开头（可能带有语言标识）
+        if text.startswith("```"):
+            # 找到第一个换行符，跳过 ```language 这一行
+            first_newline = text.find("\n")
+            if first_newline != -1:
+                text = text[first_newline + 1:]
+
+            # 去除末尾的 ```
+            if text.endswith("```"):
+                text = text[:-3]
+
+            text = text.strip()
+
+        return text
+
+    def test_connection(self):
+        """
+        测试与火山引擎大模型 API 的连接是否正常
+
+        Returns:
+            tuple: (是否连接成功, 消息)
+        """
+        try:
+            messages = [
+                HumanMessage(content="请回复'连接成功'四个字。")
+            ]
+            response = self.llm.invoke(messages)
+            if response and response.content:
+                return True, "API 连接正常: %s" % response.content.strip()
+            else:
+                return False, "API 返回为空"
+        except Exception as e:
+            return False, "API 连接失败: %s" % str(e)
