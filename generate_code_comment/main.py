@@ -34,7 +34,7 @@
     python main.py /path/to/your/project --no-context
 """
 
-from __future__ import print_function
+from __future__ import annotations
 
 import sys
 import os
@@ -47,14 +47,14 @@ if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
 from config import validate_config
-from source_reader import SourceReader
+from source_reader import SourceReader, SourceFile
 from comment_generator import CommentGenerator
 from comment_writer import CommentWriter
 from project_context import ProjectContextAnalyzer
 from progress_tracker import ProgressTracker
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """
     解析命令行参数
 
@@ -155,7 +155,7 @@ def parse_args():
     return args
 
 
-def do_test_api():
+def do_test_api() -> bool:
     """
     测试火山引擎 API 连接
     """
@@ -168,7 +168,7 @@ def do_test_api():
     if not is_valid:
         print("\n[配置错误]")
         for err in errors:
-            print("  - %s" % err)
+            print(f"  - {err}")
         return False
 
     generator = CommentGenerator()
@@ -177,15 +177,15 @@ def do_test_api():
     return success
 
 
-def do_scan_only(project_path):
+def do_scan_only(project_path: str) -> None:
     """
     仅扫描项目，列出将处理的文件
 
     Args:
-        project_path (str): 项目根目录路径
+        project_path: 项目根目录路径
     """
     print("=" * 50)
-    print("扫描项目: %s" % project_path)
+    print(f"扫描项目: {project_path}")
     print("=" * 50)
 
     reader = SourceReader(project_path)
@@ -196,18 +196,16 @@ def do_scan_only(project_path):
     if source_files:
         print("\n文件列表:")
         for i, sf in enumerate(source_files, 1):
-            print("  %3d. [%s] %s (%d bytes)" % (
-                i, sf.language, sf.rel_path, sf.size
-            ))
+            print(f"  {i:3d}. [{sf.language}] {sf.rel_path} ({sf.size} bytes)")
 
 
-def do_context_only(project_path, refresh):
+def do_context_only(project_path: str, refresh: bool) -> bool:
     """
     仅生成项目上下文概要（不执行注释生成）
 
     Args:
-        project_path (str): 项目根目录路径
-        refresh (bool): 是否强制刷新
+        project_path: 项目根目录路径
+        refresh: 是否强制刷新
     """
     print("=" * 50)
     print("项目上下文分析")
@@ -218,10 +216,10 @@ def do_context_only(project_path, refresh):
     if not is_valid:
         print("\n[配置错误]")
         for err in errors:
-            print("  - %s" % err)
+            print(f"  - {err}")
         return False
 
-    print("\n正在分析项目: %s" % project_path)
+    print(f"\n正在分析项目: {project_path}")
     analyzer = ProjectContextAnalyzer(project_path)
     summary = analyzer.get_context(force_refresh=refresh)
 
@@ -237,7 +235,7 @@ def do_context_only(project_path, refresh):
         return False
 
 
-def _mark_completed_dirs(source_files, tracker):
+def _mark_completed_dirs(source_files: list[SourceFile], tracker: ProgressTracker) -> None:
     """
     自底向上推导并标记已完成的目录
 
@@ -245,8 +243,8 @@ def _mark_completed_dirs(source_files, tracker):
     如果是则标记该目录为已完成。从最深层目录开始检查。
 
     Args:
-        source_files (list): SourceFile 对象列表
-        tracker (ProgressTracker): 进度跟踪器实例
+        source_files: SourceFile 对象列表
+        tracker: 进度跟踪器实例
     """
     # 收集所有文件的目录路径
     dir_files = {}  # dir_rel_path -> [file_rel_path, ...]
@@ -285,19 +283,20 @@ def _mark_completed_dirs(source_files, tracker):
             tracker.mark_dir_done(dir_path)
 
 
-def do_generate(project_path, output_dir, overwrite, copy_others,
-                use_context=True, refresh_context=False, reset_progress=False):
+def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy_others: bool,
+                use_context: bool = True, refresh_context: bool = False,
+                reset_progress: bool = False) -> None:
     """
     执行完整的注释生成流程
 
     Args:
-        project_path (str): 项目根目录路径
-        output_dir (str or None): 输出目录
-        overwrite (bool): 是否覆盖原文件
-        copy_others (bool): 是否复制非源码文件
-        use_context (bool): 是否使用项目上下文分析（默认 True）
-        refresh_context (bool): 是否强制刷新项目上下文（默认 False）
-        reset_progress (bool): 是否重置进度记录（默认 False）
+        project_path: 项目根目录路径
+        output_dir: 输出目录
+        overwrite: 是否覆盖原文件
+        copy_others: 是否复制非源码文件
+        use_context: 是否使用项目上下文分析（默认 True）
+        refresh_context: 是否强制刷新项目上下文（默认 False）
+        reset_progress: 是否重置进度记录（默认 False）
     """
     print("=" * 50)
     print("智能代码注释生成器")
@@ -308,12 +307,12 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
 
     # 第一步：校验配置
     step += 1
-    print("\n[%d/%d] 校验配置..." % (step, total_steps))
+    print(f"\n[{step}/{total_steps}] 校验配置...")
     is_valid, errors = validate_config()
     if not is_valid:
         print("[配置错误]")
         for err in errors:
-            print("  - %s" % err)
+            print(f"  - {err}")
         sys.exit(1)
     print("  配置校验通过 ✓")
 
@@ -324,7 +323,7 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
 
     # 第二步：扫描项目
     step += 1
-    print("\n[%d/%d] 扫描项目源码..." % (step, total_steps))
+    print(f"\n[{step}/{total_steps}] 扫描项目源码...")
     reader = SourceReader(project_path)
     source_files = reader.scan(progress_tracker=tracker)
 
@@ -338,7 +337,7 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
     project_context = None
     if use_context:
         step += 1
-        print("\n[%d/%d] 分析项目上下文..." % (step, total_steps))
+        print(f"\n[{step}/{total_steps}] 分析项目上下文...")
         try:
             analyzer = ProjectContextAnalyzer(project_path)
             project_context = analyzer.get_context(force_refresh=refresh_context)
@@ -347,12 +346,12 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
             else:
                 print("  项目上下文不可用，将以无上下文模式继续")
         except Exception as e:
-            print("  [警告] 项目上下文分析失败: %s" % str(e))
+            print(f"  [警告] 项目上下文分析失败: {e}")
             print("  将以无上下文模式继续")
 
     # 第 N 步：生成注释
     step += 1
-    print("\n[%d/%d] 调用大模型生成注释..." % (step, total_steps))
+    print(f"\n[{step}/{total_steps}] 调用大模型生成注释...")
     generator = CommentGenerator(project_context=project_context)
     writer = CommentWriter(project_path, output_dir, overwrite)
 
@@ -361,17 +360,15 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
     skipped_by_progress = 0
 
     for idx, sf in enumerate(source_files, 1):
-        progress = "[%d/%d]" % (idx, total)
+        progress = f"[{idx}/{total}]"
 
         # 断点恢复：检查文件是否已处理过
         if tracker.is_file_done(sf.rel_path):
             skipped_by_progress += 1
-            print("\n%s [跳过-已处理] %s" % (progress, sf.rel_path))
+            print(f"\n{progress} [跳过-已处理] {sf.rel_path}")
             continue
 
-        print("\n%s 处理: %s (%s, %d bytes)" % (
-            progress, sf.rel_path, sf.language, sf.size
-        ))
+        print(f"\n{progress} 处理: {sf.rel_path} ({sf.language}, {sf.size} bytes)")
 
         # 调用大模型生成注释
         commented_code = generator.generate_comment(sf)
@@ -395,24 +392,24 @@ def do_generate(project_path, output_dir, overwrite, copy_others,
     _mark_completed_dirs(source_files, tracker)
 
     if skipped_by_progress > 0:
-        print("\n[断点恢复] 本次跳过 %d 个已处理文件" % skipped_by_progress)
+        print(f"\n[断点恢复] 本次跳过 {skipped_by_progress} 个已处理文件")
 
     # 最后一步：复制非源码文件（可选）
     step += 1
     if copy_others and not overwrite:
-        print("\n[%d/%d] 复制非源码文件..." % (step, total_steps))
+        print(f"\n[{step}/{total_steps}] 复制非源码文件...")
         writer.copy_non_source_files(source_files)
         print("  复制完成 ✓")
     else:
-        print("\n[%d/%d] 跳过非源码文件复制" % (step, total_steps))
+        print(f"\n[{step}/{total_steps}] 跳过非源码文件复制")
 
     # 输出统计
     print("\n" + writer.get_summary())
-    print("总耗时: %.1f 秒" % elapsed)
-    print("平均每个文件: %.1f 秒" % (elapsed / total if total > 0 else 0))
+    print(f"总耗时: {elapsed:.1f} 秒")
+    print(f"平均每个文件: {elapsed / total if total > 0 else 0:.1f} 秒")
 
 
-def main():
+def main() -> None:
     """
     主程序入口
     """
@@ -427,7 +424,7 @@ def main():
 
     # 校验项目路径
     if not os.path.isdir(project_path):
-        print("[错误] 项目路径不存在或不是目录: %s" % project_path)
+        print(f"[错误] 项目路径不存在或不是目录: {project_path}")
         sys.exit(1)
 
     # 仅扫描模式
@@ -444,10 +441,7 @@ def main():
     if args.overwrite:
         print("\n⚠️  警告: 覆盖模式将直接修改原始源码文件！")
         print("建议在执行前先备份项目或使用 Git 管理版本。")
-        try:
-            confirm = raw_input("确认继续? (y/N): ")
-        except NameError:
-            confirm = input("确认继续? (y/N): ")
+        confirm = input("确认继续? (y/N): ")
 
         if confirm.strip().lower() != "y":
             print("已取消操作。")

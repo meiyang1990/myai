@@ -17,7 +17,7 @@
 
 ## Tech Stack
 
-- **编程语言**：Python >= 3.6
+- **编程语言**：Python >= 3.11.9
 - **AI 框架**：LangChain v0.1.16（langchain-openai v0.1.3）
 - **大模型服务**：火山引擎大模型 API（豆包模型，兼容 OpenAI 协议）
 - **项目管理**：OpenSpec 变更提案工作流

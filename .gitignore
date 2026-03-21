@@ -1,0 +1,27 @@
+# Python 虚拟环境
+venv/
+.venv/
+
+# Python 编译缓存
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# 环境变量
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 项目生成的上下文缓存
+.code_context/

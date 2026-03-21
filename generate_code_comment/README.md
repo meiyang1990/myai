@@ -176,11 +176,12 @@ generate_code_comment/
 ├── source_reader.py               # 源码读取模块（目录扫描、语言识别、文件过滤）
 ├── comment_generator.py           # 注释生成模块（LangChain + 火山引擎大模型）
 ├── comment_writer.py              # 注释回写模块（文件输出、目录管理）
+├── progress_tracker.py            # 进度跟踪模块（断点续传、处理进度管理）
+├── project_context.py             # 项目上下文分析模块（架构识别、模块关系）
 ├── main.py                        # 主程序入口（命令行工具）
 ├── requirements.txt               # Python 依赖管理
+├── setup.sh                       # 环境初始化脚本
 ├── .env.example                   # 环境变量配置模板
-├── .codebuddy/                    # CodeBuddy IDE 配置
-│   └── commands/openspec/         # OpenSpec 命令集
 ├── openspec/                      # OpenSpec 规格文档
 │   ├── AGENTS.md                  # AI 助手指南
 │   ├── project.md                 # 项目上下文
@@ -195,7 +196,7 @@ generate_code_comment/
 
 ### 前置要求
 
-- Python >= 3.6
+- Python >= 3.11.9
 - 火山引擎账号，已开通大模型服务（豆包模型）
 - 已创建推理接入点（Endpoint）
 
@@ -264,7 +265,7 @@ python main.py /path/to/your/project --copy-others
 
 | 组件 | 版本 | 说明 |
 |------|------|------|
-| Python | >= 3.6 | 运行环境 |
+| Python | >= 3.11.9 | 运行环境 |
 | LangChain | 0.1.16 | AI 编排框架 |
 | langchain-openai | 0.1.3 | OpenAI 兼容接口 |
 | 火山引擎 | v3 API | 大模型服务（兼容 OpenAI 协议） |

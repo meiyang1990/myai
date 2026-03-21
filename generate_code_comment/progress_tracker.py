@@ -9,15 +9,16 @@
 4. 支持重置进度（清除所有记录）
 """
 
+from __future__ import annotations
+
 import os
-import io
 import json
 import time
 
 from config import CONTEXT_CACHE_DIR_NAME
 
 
-class ProgressTracker(object):
+class ProgressTracker:
     """
     进度跟踪器 - 管理文件级和目录级的断点恢复状态
 
@@ -36,25 +37,25 @@ class ProgressTracker(object):
     }
     """
 
-    def __init__(self, project_root):
+    def __init__(self, project_root: str) -> None:
         """
         初始化进度跟踪器
 
         Args:
-            project_root (str): 目标项目的根目录路径
+            project_root: 目标项目的根目录路径
         """
         self.project_root = os.path.abspath(project_root)
         self.cache_dir = os.path.join(self.project_root, CONTEXT_CACHE_DIR_NAME)
         self.progress_file = os.path.join(self.cache_dir, "progress.json")
 
         # 内存中的进度数据
-        self.completed_files = {}
-        self.completed_dirs = {}
+        self.completed_files: dict[str, dict] = {}
+        self.completed_dirs: dict[str, dict] = {}
 
         # 加载已有进度
         self._load()
 
-    def _load(self):
+    def _load(self) -> None:
         """
         从 progress.json 加载已有进度数据
         """
@@ -62,7 +63,7 @@ class ProgressTracker(object):
             return
 
         try:
-            with io.open(self.progress_file, "r", encoding="utf-8") as f:
+            with open(self.progress_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             # 校验版本和项目路径
@@ -76,14 +77,14 @@ class ProgressTracker(object):
             total = len(self.completed_files)
             dir_total = len(self.completed_dirs)
             if total > 0 or dir_total > 0:
-                print("[进度] 已加载进度记录：%d 个文件、%d 个目录已完成" % (total, dir_total))
+                print(f"[进度] 已加载进度记录：{total} 个文件、{dir_total} 个目录已完成")
 
-        except (ValueError, KeyError, IOError) as e:
-            print("[进度] 读取进度文件失败: %s，将从头开始" % str(e))
+        except (ValueError, KeyError, OSError) as e:
+            print(f"[进度] 读取进度文件失败: {e}，将从头开始")
             self.completed_files = {}
             self.completed_dirs = {}
 
-    def _save(self):
+    def _save(self) -> None:
         """
         将当前进度数据持久化到 progress.json
         """
@@ -92,7 +93,7 @@ class ProgressTracker(object):
             try:
                 os.makedirs(self.cache_dir)
             except OSError as e:
-                print("[进度] 创建缓存目录失败: %s" % str(e))
+                print(f"[进度] 创建缓存目录失败: {e}")
                 return
 
         data = {
@@ -103,60 +104,60 @@ class ProgressTracker(object):
         }
 
         try:
-            with io.open(self.progress_file, "w", encoding="utf-8") as f:
+            with open(self.progress_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-        except (IOError, OSError) as e:
-            print("[进度] 保存进度文件失败: %s" % str(e))
+        except OSError as e:
+            print(f"[进度] 保存进度文件失败: {e}")
 
-    def is_file_done(self, rel_path):
+    def is_file_done(self, rel_path: str) -> bool:
         """
         检查某个文件是否已经处理过
 
         Args:
-            rel_path (str): 文件相对于项目根的相对路径
+            rel_path: 文件相对于项目根的相对路径
 
         Returns:
-            bool: 如果已处理返回 True
+            如果已处理返回 True
         """
         return rel_path in self.completed_files
 
-    def mark_file_done(self, rel_path):
+    def mark_file_done(self, rel_path: str) -> None:
         """
         标记某个文件为已完成，并立即持久化
 
         Args:
-            rel_path (str): 文件相对于项目根的相对路径
+            rel_path: 文件相对于项目根的相对路径
         """
         self.completed_files[rel_path] = {
             "timestamp": time.time(),
         }
         self._save()
 
-    def is_dir_done(self, rel_dir):
+    def is_dir_done(self, rel_dir: str) -> bool:
         """
         检查某个目录是否已经全部处理完毕
 
         Args:
-            rel_dir (str): 目录相对于项目根的相对路径
+            rel_dir: 目录相对于项目根的相对路径
 
         Returns:
-            bool: 如果该目录已全部完成返回 True
+            如果该目录已全部完成返回 True
         """
         return rel_dir in self.completed_dirs
 
-    def mark_dir_done(self, rel_dir):
+    def mark_dir_done(self, rel_dir: str) -> None:
         """
         标记某个目录为已完成，并立即持久化
 
         Args:
-            rel_dir (str): 目录相对于项目根的相对路径
+            rel_dir: 目录相对于项目根的相对路径
         """
         self.completed_dirs[rel_dir] = {
             "timestamp": time.time(),
         }
         self._save()
 
-    def reset(self):
+    def reset(self) -> None:
         """
         重置所有进度记录
         """
@@ -169,18 +170,15 @@ class ProgressTracker(object):
                 os.remove(self.progress_file)
                 print("[进度] 已清除所有进度记录")
             except OSError as e:
-                print("[进度] 删除进度文件失败: %s" % str(e))
+                print(f"[进度] 删除进度文件失败: {e}")
         else:
             print("[进度] 无进度记录需要清除")
 
-    def get_summary(self):
+    def get_summary(self) -> str:
         """
         获取进度摘要
 
         Returns:
-            str: 进度统计文本
+            进度统计文本
         """
-        return "已完成: %d 个文件, %d 个目录" % (
-            len(self.completed_files),
-            len(self.completed_dirs),
-        )
+        return f"已完成: {len(self.completed_files)} 个文件, {len(self.completed_dirs)} 个目录"

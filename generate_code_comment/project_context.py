@@ -10,8 +10,9 @@
 5. 支持缓存加载与过期检测
 """
 
+from __future__ import annotations
+
 import os
-import io
 import json
 import time
 import hashlib
@@ -111,7 +112,7 @@ CONTEXT_ANALYSIS_HUMAN_PROMPT = """请分析以下项目的源码，生成项目
 """
 
 
-class ProjectContextAnalyzer(object):
+class ProjectContextAnalyzer:
     """
     项目上下文分析器
 
@@ -126,12 +127,12 @@ class ProjectContextAnalyzer(object):
     5. 将结果 JSON 持久化到 .code_context/project_summary.json
     """
 
-    def __init__(self, project_root):
+    def __init__(self, project_root: str) -> None:
         """
         初始化项目上下文分析器
 
         Args:
-            project_root (str): 目标项目的根目录路径
+            project_root: 目标项目的根目录路径
         """
         self.project_root = os.path.abspath(project_root)
         self.cache_dir = os.path.join(self.project_root, CONTEXT_CACHE_DIR_NAME)
@@ -146,7 +147,7 @@ class ProjectContextAnalyzer(object):
             max_tokens=MAX_TOKENS,
         )
 
-    def get_context(self, force_refresh=False):
+    def get_context(self, force_refresh: bool = False) -> str | None:
         """
         获取项目上下文概要
 
@@ -154,10 +155,10 @@ class ProjectContextAnalyzer(object):
         否则重新分析项目并生成概要。
 
         Args:
-            force_refresh (bool): 是否强制重新生成（忽略缓存）
+            force_refresh: 是否强制重新生成（忽略缓存）
 
         Returns:
-            str or None: 项目概要文档（Markdown 格式），失败返回 None
+            项目概要文档（Markdown 格式），失败返回 None
         """
         # 尝试加载缓存
         if not force_refresh:
@@ -178,7 +179,7 @@ class ProjectContextAnalyzer(object):
             print("  [警告] 未能采样到任何关键文件")
             return None
 
-        print("  已采样 %d 个关键文件" % sampled_content["file_count"])
+        print(f"  已采样 {sampled_content['file_count']} 个关键文件")
 
         # 步骤 3：调用大模型生成概要
         summary = self._call_llm_for_summary(directory_tree, sampled_content["content"])
@@ -186,26 +187,26 @@ class ProjectContextAnalyzer(object):
             print("  [警告] 大模型未能生成有效概要，将以无上下文模式继续")
             return None
 
-        print("  项目概要生成成功（%d 字）" % len(summary))
+        print(f"  项目概要生成成功（{len(summary)} 字）")
 
         # 步骤 4：持久化存储
         self._save_cache(summary)
-        print("  概要已缓存到 %s" % self.cache_file)
+        print(f"  概要已缓存到 {self.cache_file}")
 
         return summary
 
-    def _load_cache(self):
+    def _load_cache(self) -> str | None:
         """
         尝试从文件加载已缓存的项目概要
 
         Returns:
-            str or None: 缓存的概要文档，无有效缓存返回 None
+            缓存的概要文档，无有效缓存返回 None
         """
         if not os.path.isfile(self.cache_file):
             return None
 
         try:
-            with io.open(self.cache_file, "r", encoding="utf-8") as f:
+            with open(self.cache_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             # 校验缓存结构
@@ -223,30 +224,30 @@ class ProjectContextAnalyzer(object):
             # 检测过期
             cache_age_days = (time.time() - data["timestamp"]) / 86400.0
             if cache_age_days > CONTEXT_CACHE_EXPIRE_DAYS:
-                print("  [提示] 项目概要缓存已过期（%.1f 天），建议使用 --refresh-context 更新" % cache_age_days)
+                print(f"  [提示] 项目概要缓存已过期（{cache_age_days:.1f} 天），建议使用 --refresh-context 更新")
                 print("  本次仍使用已有缓存")
 
             summary = data["summary"]
-            print("  已从缓存加载项目概要（%d 字）" % len(summary))
+            print(f"  已从缓存加载项目概要（{len(summary)} 字）")
             return summary
 
-        except (ValueError, KeyError, IOError) as e:
-            print("  [警告] 读取缓存失败: %s，将重新生成" % str(e))
+        except (ValueError, KeyError, OSError) as e:
+            print(f"  [警告] 读取缓存失败: {e}，将重新生成")
             return None
 
-    def _save_cache(self, summary):
+    def _save_cache(self, summary: str) -> None:
         """
         将项目概要保存到 JSON 缓存文件
 
         Args:
-            summary (str): 项目概要文档内容
+            summary: 项目概要文档内容
         """
         # 确保缓存目录存在
         if not os.path.exists(self.cache_dir):
             try:
                 os.makedirs(self.cache_dir)
             except OSError as e:
-                print("  [警告] 创建缓存目录失败: %s" % str(e))
+                print(f"  [警告] 创建缓存目录失败: {e}")
                 return
 
         data = {
@@ -258,15 +259,15 @@ class ProjectContextAnalyzer(object):
         }
 
         try:
-            with io.open(self.cache_file, "w", encoding="utf-8") as f:
+            with open(self.cache_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-        except (IOError, OSError) as e:
-            print("  [警告] 保存缓存失败: %s" % str(e))
+        except OSError as e:
+            print(f"  [警告] 保存缓存失败: {e}")
 
         # 尝试追加 .code_context 到项目的 .gitignore
         self._ensure_gitignore()
 
-    def _get_project_hash(self):
+    def _get_project_hash(self) -> str:
         """
         生成项目路径的 hash 值，用于缓存校验
 
@@ -275,7 +276,7 @@ class ProjectContextAnalyzer(object):
         """
         return hashlib.md5(self.project_root.encode("utf-8")).hexdigest()[:16]
 
-    def _ensure_gitignore(self):
+    def _ensure_gitignore(self) -> None:
         """
         检查项目 .gitignore 中是否已包含 .code_context/，
         如果没有则自动追加
@@ -286,22 +287,22 @@ class ProjectContextAnalyzer(object):
         # 如果 .gitignore 存在，检查是否已包含
         if os.path.isfile(gitignore_path):
             try:
-                with io.open(gitignore_path, "r", encoding="utf-8") as f:
+                with open(gitignore_path, "r", encoding="utf-8") as f:
                     content = f.read()
                 if ignore_entry in content:
                     return  # 已包含，无需追加
-            except (IOError, OSError):
+            except OSError:
                 return
 
         # 追加到 .gitignore
         try:
-            with io.open(gitignore_path, "a", encoding="utf-8") as f:
+            with open(gitignore_path, "a", encoding="utf-8") as f:
                 f.write("\n# 代码注释生成器的项目上下文缓存\n")
                 f.write(ignore_entry + "\n")
-        except (IOError, OSError):
+        except OSError:
             pass  # 无法写入 .gitignore 不影响主流程
 
-    def _generate_directory_tree(self, max_depth=3):
+    def _generate_directory_tree(self, max_depth: int = 3) -> str:
         """
         生成项目的目录树结构（限制深度以避免过长）
 
@@ -315,16 +316,17 @@ class ProjectContextAnalyzer(object):
         self._walk_tree(self.project_root, "", lines, depth=0, max_depth=max_depth)
         return "\n".join(lines)
 
-    def _walk_tree(self, current_path, prefix, lines, depth, max_depth):
+    def _walk_tree(self, current_path: str, prefix: str, lines: list[str],
+                   depth: int, max_depth: int) -> None:
         """
         递归生成目录树
 
         Args:
-            current_path (str): 当前目录的绝对路径
-            prefix (str): 当前行的缩进前缀
-            lines (list): 收集输出行的列表
-            depth (int): 当前深度
-            max_depth (int): 最大深度
+            current_path: 当前目录的绝对路径
+            prefix: 当前行的缩进前缀
+            lines: 收集输出行的列表
+            depth: 当前深度
+            max_depth: 最大深度
         """
         if depth > max_depth:
             return
@@ -355,7 +357,7 @@ class ProjectContextAnalyzer(object):
             connector = "└── " if is_last else "├── "
 
             if is_dir:
-                lines.append("%s%s%s/" % (prefix, connector, name))
+                lines.append(f"{prefix}{connector}{name}/")
                 extension = "    " if is_last else "│   "
                 self._walk_tree(
                     os.path.join(current_path, name),
@@ -365,9 +367,9 @@ class ProjectContextAnalyzer(object):
                     max_depth,
                 )
             else:
-                lines.append("%s%s%s" % (prefix, connector, name))
+                lines.append(f"{prefix}{connector}{name}")
 
-    def _sample_key_files(self):
+    def _sample_key_files(self) -> dict[str, str | int] | None:
         """
         智能采样项目中的关键文件
 
@@ -378,7 +380,7 @@ class ProjectContextAnalyzer(object):
         4. 各一级子目录的代表性文件
 
         Returns:
-            dict or None: {"content": str, "file_count": int}，无文件可采样返回 None
+            {"content": str, "file_count": int}，无文件可采样返回 None
         """
         sampled_files = []
         sampled_paths = set()  # 已采样文件路径集合，避免重复
@@ -442,14 +444,14 @@ class ProjectContextAnalyzer(object):
         # 组装采样结果
         parts = []
         for rel_path, content in sampled_files:
-            parts.append("### 文件: %s\n\n```\n%s\n```" % (rel_path, content))
+            parts.append(f"### 文件: {rel_path}\n\n```\n{content}\n```")
 
         return {
             "content": "\n\n---\n\n".join(parts),
             "file_count": len(sampled_files),
         }
 
-    def _find_entry_files(self):
+    def _find_entry_files(self) -> list[tuple[str, str]]:
         """
         在项目根目录和一级子目录中查找入口文件
 
@@ -485,7 +487,7 @@ class ProjectContextAnalyzer(object):
 
         return results
 
-    def _get_first_level_subdirs(self):
+    def _get_first_level_subdirs(self) -> list[str]:
         """
         获取项目的一级子目录列表（排除忽略目录和隐藏目录）
 
@@ -504,7 +506,7 @@ class ProjectContextAnalyzer(object):
             pass
         return subdirs
 
-    def _pick_representative_file(self, subdir_name):
+    def _pick_representative_file(self, subdir_name: str) -> tuple[str, str] | None:
         """
         从指定子目录中选取一个代表性源码文件
 
@@ -577,38 +579,38 @@ class ProjectContextAnalyzer(object):
         best = candidates[0]
         return (best[2], best[3])
 
-    def _read_sample_file(self, file_path):
+    def _read_sample_file(self, file_path: str) -> str | None:
         """
         读取采样文件内容，截取前 N 行
 
         Args:
-            file_path (str): 文件的绝对路径
+            file_path: 文件的绝对路径
 
         Returns:
-            str or None: 文件内容（截取后），读取失败返回 None
+            文件内容（截取后），读取失败返回 None
         """
         try:
-            with io.open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                 lines = []
                 for i, line in enumerate(f):
                     if i >= CONTEXT_FILE_MAX_LINES:
-                        lines.append("\n... (文件截断，仅显示前 %d 行)" % CONTEXT_FILE_MAX_LINES)
+                        lines.append(f"\n... (文件截断，仅显示前 {CONTEXT_FILE_MAX_LINES} 行)")
                         break
                     lines.append(line)
                 return "".join(lines)
-        except (IOError, OSError):
+        except OSError:
             return None
 
-    def _call_llm_for_summary(self, directory_tree, sampled_content):
+    def _call_llm_for_summary(self, directory_tree: str, sampled_content: str) -> str | None:
         """
         调用大模型生成项目概要文档
 
         Args:
-            directory_tree (str): 项目目录树文本
-            sampled_content (str): 采样文件的组装内容
+            directory_tree: 项目目录树文本
+            sampled_content: 采样文件的组装内容
 
         Returns:
-            str or None: 生成的概要文档，失败返回 None
+            生成的概要文档，失败返回 None
         """
         human_prompt = CONTEXT_ANALYSIS_HUMAN_PROMPT.format(
             directory_tree=directory_tree,
@@ -626,12 +628,12 @@ class ProjectContextAnalyzer(object):
                 summary = response.content.strip()
                 # 简单校验：概要不能太短
                 if len(summary) < 100:
-                    print("  [警告] 大模型返回的概要过短（%d 字），可能无效" % len(summary))
+                    print(f"  [警告] 大模型返回的概要过短（{len(summary)} 字），可能无效")
                     return None
                 return summary
             else:
                 print("  [警告] 大模型返回为空")
                 return None
         except Exception as e:
-            print("  [错误] 调用大模型分析项目失败: %s" % str(e))
+            print(f"  [错误] 调用大模型分析项目失败: {e}")
             return None

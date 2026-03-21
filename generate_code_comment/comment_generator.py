@@ -9,6 +9,10 @@
 4. 解析大模型返回结果，提取带注释的代码
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain.schema import HumanMessage, SystemMessage
@@ -21,6 +25,9 @@ from config import (
     MAX_TOKENS,
     COMMENT_STYLES,
 )
+
+if TYPE_CHECKING:
+    from source_reader import SourceFile
 
 
 # ========== Prompt 模板定义 ==========
@@ -80,7 +87,7 @@ PROJECT_CONTEXT_SECTION = """
 {project_context}"""
 
 
-class CommentGenerator(object):
+class CommentGenerator:
     """
     注释生成器 - 使用 LangChain 对接火山引擎大模型生成代码注释
 
@@ -91,13 +98,13 @@ class CommentGenerator(object):
     4. 获取带有中文注释的完整代码并返回
     """
 
-    def __init__(self, project_context=None):
+    def __init__(self, project_context: str | None = None) -> None:
         """
         初始化注释生成器，建立与火山引擎大模型的连接
 
         Args:
-            project_context (str or None): 项目上下文概要文档（Markdown 格式）。
-                                           如果提供，将追加到 System Prompt 中增强注释质量。
+            project_context: 项目上下文概要文档（Markdown 格式）。
+                             如果提供，将追加到 System Prompt 中增强注释质量。
         """
         # 使用 ChatOpenAI 通过兼容 OpenAI 协议接入火山引擎
         self.llm = ChatOpenAI(
@@ -122,7 +129,7 @@ class CommentGenerator(object):
             HumanMessagePromptTemplate.from_template(HUMAN_PROMPT_TEMPLATE),
         ])
 
-    def generate_comment(self, source_file):
+    def generate_comment(self, source_file: SourceFile) -> str | None:
         """
         为单个源码文件生成中文注释
 
@@ -132,8 +139,7 @@ class CommentGenerator(object):
             source_file: SourceFile 对象，包含文件路径、语言类型和源码内容
 
         Returns:
-            str or None: 添加了中文注释的完整代码内容。
-                         如果生成失败则返回 None。
+            添加了中文注释的完整代码内容。如果生成失败则返回 None。
         """
         language = source_file.language
         file_path = source_file.rel_path
@@ -159,10 +165,10 @@ class CommentGenerator(object):
             return commented_code
 
         except Exception as e:
-            print("[错误] 生成注释失败 (%s): %s" % (file_path, str(e)))
+            print(f"[错误] 生成注释失败 ({file_path}): {e}")
             return None
 
-    def _clean_response(self, text):
+    def _clean_response(self, text: str | None) -> str | None:
         """
         清理大模型返回内容中可能包含的 markdown 代码块标记
 
@@ -195,12 +201,12 @@ class CommentGenerator(object):
 
         return text
 
-    def test_connection(self):
+    def test_connection(self) -> tuple[bool, str]:
         """
         测试与火山引擎大模型 API 的连接是否正常
 
         Returns:
-            tuple: (是否连接成功, 消息)
+            (是否连接成功, 消息)
         """
         try:
             messages = [
@@ -208,8 +214,8 @@ class CommentGenerator(object):
             ]
             response = self.llm.invoke(messages)
             if response and response.content:
-                return True, "API 连接正常: %s" % response.content.strip()
+                return True, f"API 连接正常: {response.content.strip()}"
             else:
                 return False, "API 返回为空"
         except Exception as e:
-            return False, "API 连接失败: %s" % str(e)
+            return False, f"API 连接失败: {e}"

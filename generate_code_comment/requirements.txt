@@ -1,5 +1,5 @@
 # generate_code_comment 项目依赖
-# Python >= 3.6
+# Python >= 3.11
 
 langchain==0.1.16
 langchain-openai==0.1.3

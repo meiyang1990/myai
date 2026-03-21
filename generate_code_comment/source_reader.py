@@ -10,9 +10,12 @@
 5. 读取源码文件内容并返回结构化数据
 """
 
+from __future__ import annotations
+
 import os
-import io
 import fnmatch
+from collections import Counter
+from dataclasses import dataclass
 
 from config import (
     LANGUAGE_EXTENSIONS,
@@ -30,7 +33,8 @@ except ImportError:
     HAS_PATHSPEC = False
 
 
-class SourceFile(object):
+@dataclass
+class SourceFile:
     """
     源码文件数据结构
 
@@ -41,30 +45,17 @@ class SourceFile(object):
     - 文件大小
     """
 
-    def __init__(self, abs_path, rel_path, language, content, size):
-        """
-        初始化源码文件对象
+    abs_path: str
+    rel_path: str
+    language: str
+    content: str
+    size: int
 
-        Args:
-            abs_path (str): 文件的绝对路径
-            rel_path (str): 相对于项目根目录的相对路径
-            language (str): 编程语言类型（如 "Java", "Python" 等）
-            content (str): 文件的完整文本内容
-            size (int): 文件大小（字节）
-        """
-        self.abs_path = abs_path
-        self.rel_path = rel_path
-        self.language = language
-        self.content = content
-        self.size = size
-
-    def __repr__(self):
-        return "SourceFile(rel_path='%s', language='%s', size=%d)" % (
-            self.rel_path, self.language, self.size
-        )
+    def __repr__(self) -> str:
+        return f"SourceFile(rel_path='{self.rel_path}', language='{self.language}', size={self.size})"
 
 
-class SourceReader(object):
+class SourceReader:
     """
     源码读取器 - 扫描项目目录并加载源码文件
 
@@ -76,14 +67,15 @@ class SourceReader(object):
     - 加载文件内容并返回 SourceFile 对象列表
     """
 
-    def __init__(self, project_root, extra_ignore_dirs=None, extra_extensions=None):
+    def __init__(self, project_root: str, extra_ignore_dirs: set[str] | None = None,
+                 extra_extensions: dict[str, str] | None = None) -> None:
         """
         初始化源码读取器
 
         Args:
-            project_root (str): 目标项目的根目录路径
-            extra_ignore_dirs (set or None): 额外需要忽略的目录名称集合
-            extra_extensions (dict or None): 额外的文件扩展名->语言映射
+            project_root: 目标项目的根目录路径
+            extra_ignore_dirs: 额外需要忽略的目录名称集合
+            extra_extensions: 额外的文件扩展名->语言映射
         """
         # 转为绝对路径
         self.project_root = os.path.abspath(project_root)
@@ -101,12 +93,12 @@ class SourceReader(object):
         # 加载 .gitignore 规则
         self.gitignore_spec = self._load_gitignore()
 
-    def _load_gitignore(self):
+    def _load_gitignore(self) -> "pathspec.PathSpec | None":
         """
         加载项目根目录的 .gitignore 文件，解析为 pathspec 匹配规则
 
         Returns:
-            pathspec.PathSpec or None: 解析后的 gitignore 规则，无则返回 None
+            解析后的 gitignore 规则，无则返回 None
         """
         if not HAS_PATHSPEC:
             return None
@@ -116,14 +108,14 @@ class SourceReader(object):
             return None
 
         try:
-            with io.open(gitignore_path, "r", encoding="utf-8") as f:
+            with open(gitignore_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
             spec = pathspec.PathSpec.from_lines("gitwildmatch", lines)
             return spec
         except Exception:
             return None
 
-    def _should_ignore_dir(self, dir_name, rel_dir_path):
+    def _should_ignore_dir(self, dir_name: str, rel_dir_path: str) -> bool:
         """
         判断目录是否应该被忽略
 
@@ -151,16 +143,16 @@ class SourceReader(object):
 
         return False
 
-    def _should_ignore_file(self, file_name, rel_file_path):
+    def _should_ignore_file(self, file_name: str, rel_file_path: str) -> bool:
         """
         判断文件是否应该被忽略
 
         Args:
-            file_name (str): 文件名称
-            rel_file_path (str): 文件相对于项目根的相对路径
+            file_name: 文件名称
+            rel_file_path: 文件相对于项目根的相对路径
 
         Returns:
-            bool: 如果应该忽略返回 True
+            如果应该忽略返回 True
         """
         # 检查默认忽略文件
         if file_name in DEFAULT_IGNORE_FILES:
@@ -173,7 +165,7 @@ class SourceReader(object):
         # 检查是否为单元测试文件（Task 2.3 + 2.4）
         for pattern in TEST_FILE_PATTERNS:
             if fnmatch.fnmatch(file_name, pattern):
-                print("[跳过] 测试文件: %s" % rel_file_path)
+                print(f"[跳过] 测试文件: {rel_file_path}")
                 return True
 
         # 检查 .gitignore 规则
@@ -183,7 +175,7 @@ class SourceReader(object):
 
         return False
 
-    def _detect_language(self, file_name):
+    def _detect_language(self, file_name: str) -> str | None:
         """
         根据文件扩展名检测编程语言
 
@@ -197,36 +189,37 @@ class SourceReader(object):
         ext = ext.lower()
         return self.language_map.get(ext, None)
 
-    def _read_file_content(self, file_path):
+    def _read_file_content(self, file_path: str) -> str | None:
         """
         读取文件内容，使用 UTF-8 编码，遇到编码错误则跳过
 
         Args:
-            file_path (str): 文件的绝对路径
+            file_path: 文件的绝对路径
 
         Returns:
-            str or None: 文件内容，读取失败返回 None
+            文件内容，读取失败返回 None
         """
         try:
-            with io.open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
             return content
-        except (IOError, OSError):
+        except OSError:
             return None
 
-    def _scan_directory(self, dir_path, rel_dir, result, progress_tracker=None):
+    def _scan_directory(self, dir_path: str, rel_dir: str, result: list[SourceFile],
+                        progress_tracker: "ProgressTracker | None" = None) -> None:
         """
         递归扫描单个目录：先按字典序处理源码文件，再按字典序递归子目录
 
         Args:
-            dir_path (str): 当前目录的绝对路径
-            rel_dir (str): 当前目录相对于项目根的相对路径（根目录为空字符串）
-            result (list): 收集 SourceFile 对象的结果列表（原地追加）
+            dir_path: 当前目录的绝对路径
+            rel_dir: 当前目录相对于项目根的相对路径（根目录为空字符串）
+            result: 收集 SourceFile 对象的结果列表（原地追加）
             progress_tracker: ProgressTracker 实例，用于目录级断点跳过（可选）
         """
         # 目录级断点恢复：如果该目录已全部处理完毕，直接跳过
         if progress_tracker is not None and rel_dir and progress_tracker.is_dir_done(rel_dir):
-            print("[跳过-目录已完成] %s" % rel_dir)
+            print(f"[跳过-目录已完成] {rel_dir}")
             return
 
         try:
@@ -270,7 +263,7 @@ class SourceReader(object):
                 continue
 
             if file_size > MAX_FILE_SIZE:
-                print("[跳过] 文件过大(%d bytes): %s" % (file_size, rel_file))
+                print(f"[跳过] 文件过大({file_size} bytes): {rel_file}")
                 continue
 
             if file_size == 0:
@@ -279,7 +272,7 @@ class SourceReader(object):
             # 读取文件内容
             content = self._read_file_content(abs_file)
             if content is None:
-                print("[跳过] 无法读取: %s" % rel_file)
+                print(f"[跳过] 无法读取: {rel_file}")
                 continue
 
             source_file = SourceFile(
@@ -299,7 +292,7 @@ class SourceReader(object):
             sub_abs = os.path.join(dir_path, dname)
             self._scan_directory(sub_abs, sub_rel, result, progress_tracker)
 
-    def scan(self, progress_tracker=None):
+    def scan(self, progress_tracker: "ProgressTracker | None" = None) -> list[SourceFile]:
         """
         扫描项目目录，返回所有可处理的源码文件列表
 
@@ -311,45 +304,43 @@ class SourceReader(object):
             progress_tracker: ProgressTracker 实例，用于目录级断点跳过（可选）
 
         Returns:
-            list[SourceFile]: 源码文件对象列表（按文件优先+字典序排列）
+            源码文件对象列表（按文件优先+字典序排列）
 
         Raises:
             ValueError: 当项目根目录不存在或不可访问时
         """
         if not os.path.isdir(self.project_root):
             raise ValueError(
-                "项目路径不存在或不是目录: %s" % self.project_root
+                f"项目路径不存在或不是目录: {self.project_root}"
             )
 
-        source_files = []
+        source_files: list[SourceFile] = []
         self._scan_directory(self.project_root, "", source_files, progress_tracker)
 
-        print("[扫描完成] 共发现 %d 个源码文件" % len(source_files))
+        print(f"[扫描完成] 共发现 {len(source_files)} 个源码文件")
         return source_files
 
-    def get_project_summary(self, source_files):
+    def get_project_summary(self, source_files: list[SourceFile]) -> str:
         """
         生成项目扫描摘要信息
 
         Args:
-            source_files (list[SourceFile]): 源码文件列表
+            source_files: 源码文件列表
 
         Returns:
-            str: 项目概况的文字描述
+            项目概况的文字描述
         """
         # 按语言统计文件数量
-        lang_count = {}
-        total_size = 0
-        for sf in source_files:
-            lang_count[sf.language] = lang_count.get(sf.language, 0) + 1
-            total_size += sf.size
+        lang_count = Counter(sf.language for sf in source_files)
+        total_size = sum(sf.size for sf in source_files)
 
-        lines = []
-        lines.append("项目路径: %s" % self.project_root)
-        lines.append("源码文件总数: %d" % len(source_files))
-        lines.append("源码总大小: %.2f KB" % (total_size / 1024.0))
-        lines.append("语言分布:")
-        for lang, count in sorted(lang_count.items(), key=lambda x: -x[1]):
-            lines.append("  - %s: %d 个文件" % (lang, count))
+        lines = [
+            f"项目路径: {self.project_root}",
+            f"源码文件总数: {len(source_files)}",
+            f"源码总大小: {total_size / 1024.0:.2f} KB",
+            "语言分布:",
+        ]
+        for lang, count in lang_count.most_common():
+            lines.append(f"  - {lang}: {count} 个文件")
 
         return "\n".join(lines)

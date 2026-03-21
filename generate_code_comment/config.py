@@ -299,14 +299,14 @@ COMMENT_STYLES = {
 }
 
 
-def validate_config():
+def validate_config() -> tuple[bool, list[str]]:
     """
     校验必填配置项是否已正确设置
 
     Returns:
         tuple: (是否通过校验, 错误信息列表)
     """
-    errors = []
+    errors: list[str] = []
 
     if not VOLCENGINE_API_KEY:
         errors.append(
