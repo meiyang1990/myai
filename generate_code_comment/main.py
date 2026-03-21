@@ -19,31 +19,31 @@
 
 示例：
     # 为项目生成中文注释（输出到新目录）
-    python main.py generate_comment /path/to/your/project
+    python main.py generate_comment --project_root_dir /path/to/your/project
 
     # 指定输出目录
-    python main.py generate_comment /path/to/your/project -o /path/to/output
+    python main.py generate_comment --project_root_dir /path/to/your/project -o /path/to/output
 
     # 覆盖原文件（谨慎使用）
-    python main.py generate_comment /path/to/your/project --overwrite
+    python main.py generate_comment --project_root_dir /path/to/your/project --overwrite
 
     # 生成项目概要并写入长期记忆（--project-info 为必填参数）
-    python main.py generate_summary /path/to/your/project --project-info "这是一个电商后台管理系统..."
+    python main.py generate_summary --project_root_dir /path/to/your/project --project-info "这是一个电商后台管理系统..."
 
     # 测试 API 连接
-    python main.py test_api
+    python main.py test_api --project_root_dir /path/to/your/project
 
     # 仅扫描不生成（预览将处理哪些文件）
-    python main.py scan_only /path/to/your/project
+    python main.py scan_only --project_root_dir /path/to/your/project
 
     # 仅生成项目上下文概要
-    python main.py context_only /path/to/your/project
+    python main.py context_only --project_root_dir /path/to/your/project
 
     # 列出所有已记忆的项目概要
-    python main.py list_memories
+    python main.py list_memories --project_root_dir /path/to/your/project
 
     # 删除指定项目的长期记忆
-    python main.py remove_memory /path/to/your/project
+    python main.py remove_memory --project_root_dir /path/to/your/project
 """
 
 from __future__ import annotations
@@ -106,15 +106,15 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python main.py generate_comment /path/to/project              # 生成注释到新目录
-  python main.py generate_comment /path/to/project -o ./output  # 指定输出目录
-  python main.py generate_comment /path/to/project --overwrite  # 覆盖原文件
-  python main.py generate_summary /path/to/project --project-info "项目简要信息..."  # 生成项目概要（--project-info 必填）
-  python main.py test_api                                       # 测试 API 连接
-  python main.py scan_only /path/to/project                     # 仅扫描预览
-  python main.py context_only /path/to/project                  # 仅生成上下文概要
-  python main.py list_memories                                  # 列出所有长期记忆
-  python main.py remove_memory /path/to/project                 # 删除指定项目记忆
+  python main.py generate_comment --project_root_dir /path/to/project              # 生成注释到新目录
+  python main.py generate_comment --project_root_dir /path/to/project -o ./output  # 指定输出目录
+  python main.py generate_comment --project_root_dir /path/to/project --overwrite  # 覆盖原文件
+  python main.py generate_summary --project_root_dir /path/to/project --project-info "项目简要信息..."  # 生成项目概要
+  python main.py test_api --project_root_dir /path/to/project                      # 测试 API 连接
+  python main.py scan_only --project_root_dir /path/to/project                     # 仅扫描预览
+  python main.py context_only --project_root_dir /path/to/project                  # 仅生成上下文概要
+  python main.py list_memories --project_root_dir /path/to/project                 # 列出所有长期记忆
+  python main.py remove_memory --project_root_dir /path/to/project                 # 删除指定项目记忆
         """,
     )
 
@@ -126,7 +126,7 @@ def parse_args() -> argparse.Namespace:
         help="生成项目概要并写入长期记忆",
         description="分析项目源码结构，调用大模型生成项目概要，结果同时写入项目缓存和全局长期记忆。",
     )
-    sp_summary.add_argument("project_path", help="项目本地根目录路径")
+    sp_summary.add_argument("--project_root_dir", required=True, help="项目源码根目录路径")
     sp_summary.add_argument(
         "--project-info", required=True,
         help="项目简要信息文本（如业务背景、核心功能描述等），可提升概要质量",
@@ -142,7 +142,7 @@ def parse_args() -> argparse.Namespace:
         help="为项目源码生成中文注释",
         description="扫描项目源码文件，调用大模型生成高质量中文注释并写入输出目录或覆盖原文件。",
     )
-    sp_comment.add_argument("project_path", help="项目本地根目录路径")
+    sp_comment.add_argument("--project_root_dir", required=True, help="项目源码根目录路径")
     sp_comment.add_argument(
         "-o", "--output", default=None,
         help="输出目录路径（默认为 <项目路径>_commented）",
@@ -169,11 +169,12 @@ def parse_args() -> argparse.Namespace:
     )
 
     # ---- test_api：测试 API 连接 ----
-    subparsers.add_parser(
+    sp_test = subparsers.add_parser(
         "test_api",
         help="测试火山引擎 API 连接是否正常",
         description="向火山引擎大模型发送测试请求，验证 API Key 和 Endpoint 配置是否正确。",
     )
+    sp_test.add_argument("--project_root_dir", required=True, help="项目源码根目录路径")
 
     # ---- scan_only：仅扫描项目 ----
     sp_scan = subparsers.add_parser(
@@ -181,7 +182,7 @@ def parse_args() -> argparse.Namespace:
         help="仅扫描并列出将处理的文件",
         description="递归扫描项目目录，列出所有将被处理的源码文件，不执行注释生成。",
     )
-    sp_scan.add_argument("project_path", help="项目本地根目录路径")
+    sp_scan.add_argument("--project_root_dir", required=True, help="项目源码根目录路径")
 
     # ---- context_only：仅生成项目上下文概要 ----
     sp_ctx = subparsers.add_parser(
@@ -189,18 +190,19 @@ def parse_args() -> argparse.Namespace:
         help="仅生成项目上下文概要",
         description="分析项目结构并生成上下文概要，不执行注释生成。",
     )
-    sp_ctx.add_argument("project_path", help="项目本地根目录路径")
+    sp_ctx.add_argument("--project_root_dir", required=True, help="项目源码根目录路径")
     sp_ctx.add_argument(
         "--refresh-context", action="store_true", default=False,
         help="强制刷新，忽略已有缓存",
     )
 
     # ---- list_memories：列出所有长期记忆 ----
-    subparsers.add_parser(
+    sp_list = subparsers.add_parser(
         "list_memories",
         help="列出所有已记忆的项目概要",
         description="读取全局长期记忆存储，列出所有已保存的项目概要信息。",
     )
+    sp_list.add_argument("--project_root_dir", required=True, help="项目源码根目录路径")
 
     # ---- remove_memory：删除指定项目的长期记忆 ----
     sp_rm = subparsers.add_parser(
@@ -208,7 +210,7 @@ def parse_args() -> argparse.Namespace:
         help="删除指定项目的长期记忆",
         description="从全局长期记忆中移除指定项目的概要记录。",
     )
-    sp_rm.add_argument("project_path", help="项目本地根目录路径")
+    sp_rm.add_argument("--project_root_dir", required=True, help="项目源码根目录路径")
 
     args = parser.parse_args()
 
@@ -620,9 +622,9 @@ def _validate_project_path(project_path: str) -> None:
 
 def _handle_generate_summary(args: argparse.Namespace) -> None:
     """generate_summary 子命令处理"""
-    _validate_project_path(args.project_path)
+    _validate_project_path(args.project_root_dir)
     success = do_generate_summary(
-        args.project_path,
+        args.project_root_dir,
         project_info=args.project_info,
         refresh=args.refresh_context,
     )
@@ -634,7 +636,7 @@ def _handle_generate_summary(args: argparse.Namespace) -> None:
 
 def _handle_generate_comment(args: argparse.Namespace) -> None:
     """generate_comment 子命令处理"""
-    _validate_project_path(args.project_path)
+    _validate_project_path(args.project_root_dir)
 
     # 覆盖模式下给出警告
     if args.overwrite:
@@ -646,7 +648,7 @@ def _handle_generate_comment(args: argparse.Namespace) -> None:
             return
 
     do_generate(
-        args.project_path,
+        args.project_root_dir,
         args.output,
         args.overwrite,
         args.copy_others,
@@ -658,32 +660,34 @@ def _handle_generate_comment(args: argparse.Namespace) -> None:
 
 def _handle_test_api(args: argparse.Namespace) -> None:
     """test_api 子命令处理"""
+    _validate_project_path(args.project_root_dir)
     success = do_test_api()
     sys.exit(0 if success else 1)
 
 
 def _handle_scan_only(args: argparse.Namespace) -> None:
     """scan_only 子命令处理"""
-    _validate_project_path(args.project_path)
-    do_scan_only(args.project_path)
+    _validate_project_path(args.project_root_dir)
+    do_scan_only(args.project_root_dir)
 
 
 def _handle_context_only(args: argparse.Namespace) -> None:
     """context_only 子命令处理"""
-    _validate_project_path(args.project_path)
-    success = do_context_only(args.project_path, refresh=args.refresh_context)
+    _validate_project_path(args.project_root_dir)
+    success = do_context_only(args.project_root_dir, refresh=args.refresh_context)
     sys.exit(0 if success else 1)
 
 
 def _handle_list_memories(args: argparse.Namespace) -> None:
     """list_memories 子命令处理"""
+    _validate_project_path(args.project_root_dir)
     do_list_memories()
 
 
 def _handle_remove_memory(args: argparse.Namespace) -> None:
     """remove_memory 子命令处理"""
-    _validate_project_path(args.project_path)
-    success = do_remove_memory(args.project_path)
+    _validate_project_path(args.project_root_dir)
+    success = do_remove_memory(args.project_root_dir)
     sys.exit(0 if success else 1)
 
 
