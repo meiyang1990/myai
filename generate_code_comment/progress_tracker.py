@@ -13,9 +13,12 @@ from __future__ import annotations
 
 import os
 import json
+import logging
 import time
 
 from config import CONTEXT_CACHE_DIR_NAME
+
+logger = logging.getLogger(__name__)
 
 
 class ProgressTracker:
@@ -68,7 +71,7 @@ class ProgressTracker:
 
             # 校验版本和项目路径
             if data.get("project_path") != self.project_root:
-                print("[进度] 进度文件的项目路径不匹配，将忽略已有进度")
+                logger.info("进度文件的项目路径不匹配，将忽略已有进度")
                 return
 
             self.completed_files = data.get("completed_files", {})
@@ -77,10 +80,10 @@ class ProgressTracker:
             total = len(self.completed_files)
             dir_total = len(self.completed_dirs)
             if total > 0 or dir_total > 0:
-                print(f"[进度] 已加载进度记录：{total} 个文件、{dir_total} 个目录已完成")
+                logger.info(f"已加载进度记录：{total} 个文件、{dir_total} 个目录已完成")
 
         except (ValueError, KeyError, OSError) as e:
-            print(f"[进度] 读取进度文件失败: {e}，将从头开始")
+            logger.warning(f"读取进度文件失败: {e}，将从头开始")
             self.completed_files = {}
             self.completed_dirs = {}
 
@@ -93,7 +96,7 @@ class ProgressTracker:
             try:
                 os.makedirs(self.cache_dir)
             except OSError as e:
-                print(f"[进度] 创建缓存目录失败: {e}")
+                logger.error(f"创建缓存目录失败: {e}")
                 return
 
         data = {
@@ -107,7 +110,7 @@ class ProgressTracker:
             with open(self.progress_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except OSError as e:
-            print(f"[进度] 保存进度文件失败: {e}")
+            logger.error(f"保存进度文件失败: {e}")
 
     def is_file_done(self, rel_path: str) -> bool:
         """
@@ -168,11 +171,11 @@ class ProgressTracker:
         if os.path.isfile(self.progress_file):
             try:
                 os.remove(self.progress_file)
-                print("[进度] 已清除所有进度记录")
+                logger.info("已清除所有进度记录")
             except OSError as e:
-                print(f"[进度] 删除进度文件失败: {e}")
+                logger.error(f"删除进度文件失败: {e}")
         else:
-            print("[进度] 无进度记录需要清除")
+            logger.info("无进度记录需要清除")
 
     def get_summary(self) -> str:
         """

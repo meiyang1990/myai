@@ -12,11 +12,14 @@
 from __future__ import annotations
 
 import os
+import logging
 import shutil
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from source_reader import SourceFile
+
+logger = logging.getLogger(__name__)
 
 
 class CommentWriter:
@@ -80,7 +83,7 @@ class CommentWriter:
             try:
                 os.makedirs(output_dir)
             except OSError as e:
-                print(f"[错误] 创建目录失败 {output_dir}: {e}")
+                logger.error(f"创建目录失败 {output_dir}: {e}")
                 self.fail_count += 1
                 return False
 
@@ -93,7 +96,7 @@ class CommentWriter:
             return True
 
         except OSError as e:
-            print(f"[错误] 写入文件失败 {output_path}: {e}")
+            logger.error(f"写入文件失败 {output_path}: {e}")
             self.fail_count += 1
             return False
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import fnmatch
+import logging
 from collections import Counter
 from dataclasses import dataclass
 
@@ -165,7 +166,7 @@ class SourceReader:
         # 检查是否为单元测试文件（Task 2.3 + 2.4）
         for pattern in TEST_FILE_PATTERNS:
             if fnmatch.fnmatch(file_name, pattern):
-                print(f"[跳过] 测试文件: {rel_file_path}")
+                logger.info(f"[跳过] 测试文件: {rel_file_path}")
                 return True
 
         # 检查 .gitignore 规则
@@ -219,7 +220,7 @@ class SourceReader:
         """
         # 目录级断点恢复：如果该目录已全部处理完毕，直接跳过
         if progress_tracker is not None and rel_dir and progress_tracker.is_dir_done(rel_dir):
-            print(f"[跳过-目录已完成] {rel_dir}")
+            logger.info(f"[跳过-目录已完成] {rel_dir}")
             return
 
         try:
@@ -263,7 +264,7 @@ class SourceReader:
                 continue
 
             if file_size > MAX_FILE_SIZE:
-                print(f"[跳过] 文件过大({file_size} bytes): {rel_file}")
+                logger.warning(f"[跳过] 文件过大({file_size} bytes): {rel_file}")
                 continue
 
             if file_size == 0:
@@ -272,7 +273,7 @@ class SourceReader:
             # 读取文件内容
             content = self._read_file_content(abs_file)
             if content is None:
-                print(f"[跳过] 无法读取: {rel_file}")
+                logger.warning(f"[跳过] 无法读取: {rel_file}")
                 continue
 
             source_file = SourceFile(
@@ -317,7 +318,7 @@ class SourceReader:
         source_files: list[SourceFile] = []
         self._scan_directory(self.project_root, "", source_files, progress_tracker)
 
-        print(f"[扫描完成] 共发现 {len(source_files)} 个源码文件")
+        logger.info(f"[扫描完成] 共发现 {len(source_files)} 个源码文件")
         return source_files
 
     def get_project_summary(self, source_files: list[SourceFile]) -> str:

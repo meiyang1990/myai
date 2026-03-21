@@ -9,6 +9,7 @@
 """
 
 import os
+import logging
 from dotenv import load_dotenv
 
 # 加载 .env 文件中的环境变量
@@ -297,6 +298,43 @@ COMMENT_STYLES = {
         "inline_comment": "# ",
     },
 }
+
+
+# ========== 日志配置 ==========
+
+# 日志文件路径（默认工作目录下的 generate_code_comment.log）
+LOG_FILE = os.getenv("LOG_FILE", "generate_code_comment.log")
+
+# 日志级别（默认 INFO，可通过环境变量 LOG_LEVEL 调整）
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+
+def setup_logging() -> None:
+    """
+    配置全局日志，将所有日志输出到文件，不输出到终端
+
+    日志格式：时间戳 [模块名] 级别: 消息
+    日志级别通过环境变量 LOG_LEVEL 控制，默认 INFO
+    日志文件通过环境变量 LOG_FILE 控制，默认 generate_code_comment.log
+    """
+    level = getattr(logging, LOG_LEVEL, logging.INFO)
+
+    # 创建文件 handler，写入日志文件
+    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    file_handler.setLevel(level)
+
+    formatter = logging.Formatter(
+        "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler.setFormatter(formatter)
+
+    # 配置根 logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    # 移除默认的 StreamHandler（如果有）
+    root_logger.handlers.clear()
+    root_logger.addHandler(file_handler)
 
 
 def validate_config() -> tuple[bool, list[str]]:

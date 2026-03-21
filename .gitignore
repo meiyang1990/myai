@@ -25,3 +25,6 @@ Thumbs.db
 
 # 项目生成的上下文缓存
 .code_context/
+
+# 日志文件
+*.log

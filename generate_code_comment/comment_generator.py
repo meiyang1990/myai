@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from langchain_openai import ChatOpenAI
@@ -28,6 +29,8 @@ from config import (
 
 if TYPE_CHECKING:
     from source_reader import SourceFile
+
+logger = logging.getLogger(__name__)
 
 
 # ========== Prompt 模板定义 ==========
@@ -165,7 +168,7 @@ class CommentGenerator:
             return commented_code
 
         except Exception as e:
-            print(f"[错误] 生成注释失败 ({file_path}): {e}")
+            logger.error(f"生成注释失败 ({file_path}): {e}")
             return None
 
     def _clean_response(self, text: str | None) -> str | None:

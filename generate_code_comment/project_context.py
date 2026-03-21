@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import json
+import logging
 import time
 import hashlib
 
@@ -167,31 +168,31 @@ class ProjectContextAnalyzer:
                 return cached
 
         # 重新分析项目
-        print("  正在分析项目架构...")
+        logger.info("正在分析项目架构...")
 
         # 步骤 1：生成目录树
         directory_tree = self._generate_directory_tree()
-        print("  目录树生成完毕")
+        logger.info("目录树生成完毕")
 
         # 步骤 2：智能采样关键文件
         sampled_content = self._sample_key_files()
         if not sampled_content:
-            print("  [警告] 未能采样到任何关键文件")
+            logger.warning("未能采样到任何关键文件")
             return None
 
-        print(f"  已采样 {sampled_content['file_count']} 个关键文件")
+        logger.info(f"已采样 {sampled_content['file_count']} 个关键文件")
 
         # 步骤 3：调用大模型生成概要
         summary = self._call_llm_for_summary(directory_tree, sampled_content["content"])
         if not summary:
-            print("  [警告] 大模型未能生成有效概要，将以无上下文模式继续")
+            logger.warning("大模型未能生成有效概要，将以无上下文模式继续")
             return None
 
-        print(f"  项目概要生成成功（{len(summary)} 字）")
+        logger.info(f"项目概要生成成功（{len(summary)} 字）")
 
         # 步骤 4：持久化存储
         self._save_cache(summary)
-        print(f"  概要已缓存到 {self.cache_file}")
+        logger.info(f"概要已缓存到 {self.cache_file}")
 
         return summary
 
@@ -211,28 +212,28 @@ class ProjectContextAnalyzer:
 
             # 校验缓存结构
             if "summary" not in data or "timestamp" not in data:
-                print("  [警告] 缓存文件格式无效，将重新生成")
+                logger.warning("缓存文件格式无效，将重新生成")
                 return None
 
             # 校验项目路径是否匹配
             cached_path_hash = data.get("project_path_hash", "")
             current_hash = self._get_project_hash()
             if cached_path_hash != current_hash:
-                print("  [提示] 缓存的项目路径不匹配，将重新生成")
+                logger.info("缓存的项目路径不匹配，将重新生成")
                 return None
 
             # 检测过期
             cache_age_days = (time.time() - data["timestamp"]) / 86400.0
             if cache_age_days > CONTEXT_CACHE_EXPIRE_DAYS:
-                print(f"  [提示] 项目概要缓存已过期（{cache_age_days:.1f} 天），建议使用 --refresh-context 更新")
-                print("  本次仍使用已有缓存")
+                logger.info(f"项目概要缓存已过期（{cache_age_days:.1f} 天），建议使用 --refresh-context 更新")
+                logger.info("本次仍使用已有缓存")
 
             summary = data["summary"]
-            print(f"  已从缓存加载项目概要（{len(summary)} 字）")
+            logger.info(f"已从缓存加载项目概要（{len(summary)} 字）")
             return summary
 
         except (ValueError, KeyError, OSError) as e:
-            print(f"  [警告] 读取缓存失败: {e}，将重新生成")
+            logger.warning(f"读取缓存失败: {e}，将重新生成")
             return None
 
     def _save_cache(self, summary: str) -> None:
@@ -247,7 +248,7 @@ class ProjectContextAnalyzer:
             try:
                 os.makedirs(self.cache_dir)
             except OSError as e:
-                print(f"  [警告] 创建缓存目录失败: {e}")
+                logger.warning(f"创建缓存目录失败: {e}")
                 return
 
         data = {
@@ -262,7 +263,7 @@ class ProjectContextAnalyzer:
             with open(self.cache_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except OSError as e:
-            print(f"  [警告] 保存缓存失败: {e}")
+            logger.warning(f"保存缓存失败: {e}")
 
         # 尝试追加 .code_context 到项目的 .gitignore
         self._ensure_gitignore()
@@ -628,12 +629,12 @@ class ProjectContextAnalyzer:
                 summary = response.content.strip()
                 # 简单校验：概要不能太短
                 if len(summary) < 100:
-                    print(f"  [警告] 大模型返回的概要过短（{len(summary)} 字），可能无效")
+                    logger.warning(f"大模型返回的概要过短（{len(summary)} 字），可能无效")
                     return None
                 return summary
             else:
-                print("  [警告] 大模型返回为空")
+                logger.warning("大模型返回为空")
                 return None
         except Exception as e:
-            print(f"  [错误] 调用大模型分析项目失败: {e}")
+            logger.error(f"调用大模型分析项目失败: {e}")
             return None
