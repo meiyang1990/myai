@@ -72,7 +72,7 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
-from config import validate_config, setup_logging, LOG_FILE
+from config import validate_config, setup_logging, LOG_FILE, has_commented_marker
 from source_reader import SourceReader, SourceFile
 from comment_generator import CommentGenerator
 from comment_writer import CommentWriter
@@ -618,6 +618,7 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
     total = len(source_files)
     start_time = time.time()
     skipped_by_progress = 0
+    skipped_by_marker = 0
 
     for idx, sf in enumerate(source_files, 1):
         progress = f"[{idx}/{total}]"
@@ -626,6 +627,13 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
         if not force and tracker.is_file_done(sf.rel_path):
             skipped_by_progress += 1
             logger.info(f"{progress} [跳过-已处理] {sf.rel_path}")
+            continue
+
+        # 已注释标记检测：读取源码内容，检查是否包含"已处理"标记注释
+        if sf.content and has_commented_marker(sf.content, sf.language):
+            skipped_by_marker += 1
+            tracker.mark_file_done(sf.rel_path)
+            logger.info(f"{progress} [跳过-已包含注释标记] {sf.rel_path}")
             continue
 
         logger.info(f"{progress} 处理: {sf.rel_path} ({sf.language}, {sf.size} bytes)")
@@ -653,6 +661,8 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
 
     if skipped_by_progress > 0:
         logger.info(f"[断点恢复] 本次跳过 {skipped_by_progress} 个已处理文件")
+    if skipped_by_marker > 0:
+        logger.info(f"[注释标记] 本次跳过 {skipped_by_marker} 个已包含注释标记的文件")
 
     # 最后一步：复制非源码文件（可选）
     step += 1

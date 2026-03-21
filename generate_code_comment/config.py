@@ -199,6 +199,74 @@ MEMORY_STORE_DIR = os.path.expanduser(
 MEMORY_STORE_FILE = os.environ.get("MEMORY_STORE_FILE", "project_summaries.json")
 
 
+# ========== 已注释标记配置 ==========
+
+# 标记文本常量：当文件中包含此文本的单行注释时，视为"已处理"
+COMMENTED_MARKER_TEXT = "这个文件已经全部加上中文注释"
+
+# 各编程语言的单行注释前缀映射（用于生成和检测标记行）
+_SINGLE_LINE_COMMENT_PREFIX = {
+    "Java": "//",
+    "Python": "#",
+    "JavaScript": "//",
+    "TypeScript": "//",
+    "Go": "//",
+    "Kotlin": "//",
+    "C": "//",
+    "C++": "//",
+    "C/C++ Header": "//",
+    "C++ Header": "//",
+    "C#": "//",
+    "Ruby": "#",
+    "Rust": "//",
+    "Swift": "//",
+    "Scala": "//",
+    "PHP": "//",
+    "Vue": "//",
+    "Shell": "#",
+}
+
+
+def get_comment_marker_line(language: str) -> str:
+    """
+    根据编程语言返回完整的已注释标记行
+
+    例如:
+        Java  -> "// 这个文件已经全部加上中文注释"
+        Python -> "# 这个文件已经全部加上中文注释"
+
+    Args:
+        language: 编程语言名称（与 LANGUAGE_EXTENSIONS 的值一致）
+
+    Returns:
+        完整的标记注释行字符串
+    """
+    prefix = _SINGLE_LINE_COMMENT_PREFIX.get(language, "//")
+    return f"{prefix} {COMMENTED_MARKER_TEXT}"
+
+
+def has_commented_marker(content: str, language: str) -> bool:
+    """
+    检测源码内容中是否存在已注释标记行
+
+    逐行扫描文件内容，检查是否存在一行去除首尾空白后以该语言的单行注释符开头，
+    且包含 COMMENTED_MARKER_TEXT 文本。
+
+    Args:
+        content: 源码文件的完整文本内容
+        language: 编程语言名称
+
+    Returns:
+        如果检测到标记行返回 True，否则返回 False
+    """
+    prefix = _SINGLE_LINE_COMMENT_PREFIX.get(language, "//")
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(prefix) and COMMENTED_MARKER_TEXT in stripped:
+            return True
+    return False
+
+
 # ========== 注释风格配置 ==========
 
 # 各编程语言的注释格式模板

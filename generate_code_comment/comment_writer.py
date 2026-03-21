@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from source_reader import SourceFile
 
+from config import COMMENTED_MARKER_TEXT, get_comment_marker_line
+
 logger = logging.getLogger(__name__)
 
 
@@ -84,6 +86,12 @@ class CommentWriter:
         if commented_code is None:
             self.skip_count += 1
             return False
+
+        # 在内容开头插入已注释标记行（如果第一行尚未包含标记文本）
+        first_line = commented_code.split("\n", 1)[0]
+        if COMMENTED_MARKER_TEXT not in first_line:
+            marker_line = get_comment_marker_line(source_file.language)
+            commented_code = marker_line + "\n" + commented_code
 
         # 计算输出文件路径
         if self.overwrite:
