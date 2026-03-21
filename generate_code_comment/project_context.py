@@ -655,16 +655,46 @@ class ProjectContextAnalyzer:
         ]
 
         try:
+            # ---- 请求日志 ----
+            prompt_total_len = sum(len(m.content) for m in messages)
+            logger.info(
+                f"[LLM请求] _call_llm_for_summary | Prompt总长度: {prompt_total_len} 字符 "
+                f"(System: {len(messages[0].content)}, Human: {len(messages[1].content)})"
+            )
+            logger.debug(f"[LLM请求] System Prompt:\n{messages[0].content}")
+            logger.debug(f"[LLM请求] Human Prompt:\n{messages[1].content}")
+
+            # 调用大模型
+            t0 = time.time()
             response = self.llm.invoke(messages)
+            elapsed = time.time() - t0
+
+            # ---- 响应日志 ----
             if response and response.content:
                 summary = response.content.strip()
+                logger.info(
+                    f"[LLM响应] _call_llm_for_summary | 响应长度: {len(summary)} 字符 | 耗时: {elapsed:.2f}s"
+                )
+                logger.debug(f"[LLM响应] 完整内容:\n{summary}")
+
+                # token 用量日志
+                if hasattr(response, "response_metadata") and response.response_metadata:
+                    token_usage = response.response_metadata.get("token_usage") or response.response_metadata.get("usage")
+                    if token_usage:
+                        logger.info(
+                            f"[LLM Token] _call_llm_for_summary | "
+                            f"prompt_tokens={token_usage.get('prompt_tokens', 'N/A')}, "
+                            f"completion_tokens={token_usage.get('completion_tokens', 'N/A')}, "
+                            f"total_tokens={token_usage.get('total_tokens', 'N/A')}"
+                        )
+
                 # 简单校验：概要不能太短
                 if len(summary) < 100:
                     logger.warning(f"大模型返回的概要过短（{len(summary)} 字），可能无效")
                     return None
                 return summary
             else:
-                logger.warning("大模型返回为空")
+                logger.warning(f"大模型返回为空 | 耗时: {elapsed:.2f}s")
                 return None
         except Exception as e:
             logger.error(f"调用大模型分析项目失败: {e}")

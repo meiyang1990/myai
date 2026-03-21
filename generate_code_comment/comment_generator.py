@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from langchain_openai import ChatOpenAI
@@ -156,8 +157,39 @@ class CommentGenerator:
                 source_code=source_code,
             )
 
+            # ---- 请求日志 ----
+            prompt_total_len = sum(len(m.content) for m in messages)
+            logger.info(
+                f"[LLM请求] generate_comment | 文件: {file_path} | 语言: {language} | "
+                f"Prompt总长度: {prompt_total_len} 字符"
+            )
+            for i, m in enumerate(messages):
+                logger.debug(f"[LLM请求] message[{i}] role={m.type}, 长度={len(m.content)} 字符")
+                logger.debug(f"[LLM请求] message[{i}] 内容:\n{m.content}")
+
             # 调用大模型生成注释
+            t0 = time.time()
             response = self.llm.invoke(messages)
+            elapsed = time.time() - t0
+
+            # ---- 响应日志 ----
+            response_len = len(response.content) if response.content else 0
+            logger.info(
+                f"[LLM响应] generate_comment | 文件: {file_path} | "
+                f"响应长度: {response_len} 字符 | 耗时: {elapsed:.2f}s"
+            )
+            logger.debug(f"[LLM响应] 完整内容:\n{response.content}")
+
+            # token 用量日志
+            if hasattr(response, "response_metadata") and response.response_metadata:
+                token_usage = response.response_metadata.get("token_usage") or response.response_metadata.get("usage")
+                if token_usage:
+                    logger.info(
+                        f"[LLM Token] generate_comment | 文件: {file_path} | "
+                        f"prompt_tokens={token_usage.get('prompt_tokens', 'N/A')}, "
+                        f"completion_tokens={token_usage.get('completion_tokens', 'N/A')}, "
+                        f"total_tokens={token_usage.get('total_tokens', 'N/A')}"
+                    )
 
             # 提取生成的代码内容
             commented_code = response.content
@@ -215,10 +247,41 @@ class CommentGenerator:
             messages = [
                 HumanMessage(content="请回复'连接成功'四个字。")
             ]
+
+            # ---- 请求日志 ----
+            prompt_total_len = sum(len(m.content) for m in messages)
+            logger.info(
+                f"[LLM请求] test_connection | Prompt总长度: {prompt_total_len} 字符"
+            )
+            logger.debug(f"[LLM请求] test_connection | 内容: {messages[0].content}")
+
+            # 调用大模型
+            t0 = time.time()
             response = self.llm.invoke(messages)
+            elapsed = time.time() - t0
+
+            # ---- 响应日志 ----
             if response and response.content:
+                response_len = len(response.content)
+                logger.info(
+                    f"[LLM响应] test_connection | 响应长度: {response_len} 字符 | 耗时: {elapsed:.2f}s"
+                )
+                logger.debug(f"[LLM响应] test_connection | 完整内容: {response.content}")
+
+                # token 用量日志
+                if hasattr(response, "response_metadata") and response.response_metadata:
+                    token_usage = response.response_metadata.get("token_usage") or response.response_metadata.get("usage")
+                    if token_usage:
+                        logger.info(
+                            f"[LLM Token] test_connection | "
+                            f"prompt_tokens={token_usage.get('prompt_tokens', 'N/A')}, "
+                            f"completion_tokens={token_usage.get('completion_tokens', 'N/A')}, "
+                            f"total_tokens={token_usage.get('total_tokens', 'N/A')}"
+                        )
+
                 return True, f"API 连接正常: {response.content.strip()}"
             else:
+                logger.info(f"[LLM响应] test_connection | 返回为空 | 耗时: {elapsed:.2f}s")
                 return False, "API 返回为空"
         except Exception as e:
             logger.error(f"API 连接失败: {e}")
