@@ -113,6 +113,17 @@ CONTEXT_ANALYSIS_HUMAN_PROMPT = """请分析以下项目的源码，生成项目
 """
 
 
+# 当用户提供了项目简要信息时，追加到 Human Prompt 中的章节
+CONTEXT_PROJECT_INFO_SECTION = """
+
+## 用户提供的项目简要信息
+
+以下是项目相关人员提供的额外背景信息，请结合这些信息和上方的代码分析，生成更准确的项目概要：
+
+{project_info}
+"""
+
+
 class ProjectContextAnalyzer:
     """
     项目上下文分析器
@@ -148,7 +159,7 @@ class ProjectContextAnalyzer:
             max_tokens=MAX_TOKENS,
         )
 
-    def get_context(self, force_refresh: bool = False) -> str | None:
+    def get_context(self, force_refresh: bool = False, project_info: str | None = None) -> str | None:
         """
         获取项目上下文概要
 
@@ -157,6 +168,8 @@ class ProjectContextAnalyzer:
 
         Args:
             force_refresh: 是否强制重新生成（忽略缓存）
+            project_info: 用户提供的项目简要信息文本（如业务背景、核心功能等），
+                          将作为额外上下文喂给大模型生成更精准的概要
 
         Returns:
             项目概要文档（Markdown 格式），失败返回 None
@@ -182,8 +195,10 @@ class ProjectContextAnalyzer:
 
         logger.info(f"已采样 {sampled_content['file_count']} 个关键文件")
 
-        # 步骤 3：调用大模型生成概要
-        summary = self._call_llm_for_summary(directory_tree, sampled_content["content"])
+        # 步骤 3：调用大模型生成概要（传入 project_info）
+        summary = self._call_llm_for_summary(
+            directory_tree, sampled_content["content"], project_info=project_info
+        )
         if not summary:
             logger.warning("大模型未能生成有效概要，将以无上下文模式继续")
             return None
@@ -602,13 +617,20 @@ class ProjectContextAnalyzer:
         except OSError:
             return None
 
-    def _call_llm_for_summary(self, directory_tree: str, sampled_content: str) -> str | None:
+    def _call_llm_for_summary(
+        self,
+        directory_tree: str,
+        sampled_content: str,
+        project_info: str | None = None,
+    ) -> str | None:
         """
         调用大模型生成项目概要文档
 
         Args:
             directory_tree: 项目目录树文本
             sampled_content: 采样文件的组装内容
+            project_info: 用户提供的项目简要信息（可选），
+                          不为空时将追加到 Human Prompt 中
 
         Returns:
             生成的概要文档，失败返回 None
@@ -617,6 +639,12 @@ class ProjectContextAnalyzer:
             directory_tree=directory_tree,
             sampled_files_content=sampled_content,
         )
+
+        # 如果用户提供了项目简要信息，追加到 Human Prompt 中
+        if project_info:
+            human_prompt += CONTEXT_PROJECT_INFO_SECTION.format(
+                project_info=project_info,
+            )
 
         messages = [
             SystemMessage(content=CONTEXT_ANALYSIS_SYSTEM_PROMPT),

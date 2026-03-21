@@ -172,12 +172,13 @@ if (!passwordEncoder.matches(password, user.getPasswordHash())) {
 
 ```
 generate_code_comment/
-├── config.py                      # 配置模块（API 配置、扫描规则、注释风格）
+├── config.py                      # 配置模块（API 配置、扫描规则、注释风格、记忆存储）
 ├── source_reader.py               # 源码读取模块（目录扫描、语言识别、文件过滤）
 ├── comment_generator.py           # 注释生成模块（LangChain + 火山引擎大模型）
 ├── comment_writer.py              # 注释回写模块（文件输出、目录管理）
 ├── progress_tracker.py            # 进度跟踪模块（断点续传、处理进度管理）
 ├── project_context.py             # 项目上下文分析模块（架构识别、模块关系）
+├── memory_store.py                # 长期记忆存储模块（项目概要全局持久化）
 ├── main.py                        # 主程序入口（命令行工具）
 ├── requirements.txt               # Python 依赖管理
 ├── setup.sh                       # 环境初始化脚本
@@ -248,6 +249,18 @@ python main.py /path/to/your/project --overwrite
 
 # 6. 同时复制非源码文件到输出目录
 python main.py /path/to/your/project --copy-others
+
+# 7. 独立生成项目概要并写入长期记忆
+python main.py /path/to/your/project --generate-summary
+
+# 8. 生成概要时附带项目简要信息（提升概要质量）
+python main.py /path/to/your/project --generate-summary --project-info "这是一个电商后台管理系统..."
+
+# 9. 列出所有已记忆的项目概要
+python main.py --list-memories
+
+# 10. 删除指定项目的长期记忆
+python main.py /path/to/your/project --remove-memory
 ```
 
 ### 命令行参数说明
@@ -260,6 +273,14 @@ python main.py /path/to/your/project --copy-others
 | `--scan-only` | 仅扫描并列出将处理的文件 |
 | `--test-api` | 测试火山引擎 API 连接 |
 | `--copy-others` | 在输出模式下同时复制非源码文件 |
+| `--context-only` | 仅生成项目上下文概要（不执行注释生成） |
+| `--refresh-context` | 强制刷新项目上下文概要 |
+| `--no-context` | 跳过项目上下文分析 |
+| `--reset-progress` | 重置进度记录，从头处理所有文件 |
+| `--generate-summary` | 独立生成项目概要并写入长期记忆（不执行注释生成） |
+| `--project-info` | 项目简要信息文本，配合 `--generate-summary` 使用 |
+| `--list-memories` | 列出所有已记忆的项目概要 |
+| `--remove-memory` | 删除指定项目的长期记忆 |
 
 ### 技术栈
 
@@ -277,7 +298,7 @@ python main.py /path/to/your/project --copy-others
 - [x] 注释生成模块（LangChain + 火山引擎）
 - [x] 注释回写与格式保持
 - [x] 命令行工具入口
-- [ ] 架构分析引擎（增强注释上下文理解）
+- [x] 架构分析引擎（项目上下文理解 + 长期记忆）
 - [ ] 增量处理与性能优化
 - [ ] 注释质量评估与反馈机制
 

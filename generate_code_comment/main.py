@@ -32,6 +32,18 @@
 
     # 跳过项目上下文分析（兼容旧行为）
     python main.py /path/to/your/project --no-context
+
+    # 独立生成项目概要并写入长期记忆
+    python main.py /path/to/your/project --generate-summary
+
+    # 独立生成项目概要，附带用户提供的项目简要信息
+    python main.py /path/to/your/project --generate-summary --project-info "这是一个电商后台管理系统..."
+
+    # 列出所有已记忆的项目概要
+    python main.py --list-memories
+
+    # 删除指定项目的长期记忆
+    python main.py /path/to/your/project --remove-memory
 """
 
 from __future__ import annotations
@@ -53,6 +65,7 @@ from comment_generator import CommentGenerator
 from comment_writer import CommentWriter
 from project_context import ProjectContextAnalyzer
 from progress_tracker import ProgressTracker
+from memory_store import ProjectMemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +90,10 @@ def parse_args() -> argparse.Namespace:
   python main.py /path/to/project --context-only          # 仅生成上下文概要
   python main.py /path/to/project --refresh-context        # 强制刷新上下文
   python main.py /path/to/project --no-context             # 跳过上下文分析
+  python main.py /path/to/project --generate-summary       # 独立生成项目概要并写入长期记忆
+  python main.py /path/to/project --generate-summary --project-info "项目简要信息..."
+  python main.py --list-memories                            # 列出所有长期记忆
+  python main.py /path/to/project --remove-memory           # 删除指定项目记忆
         """,
     )
 
@@ -149,7 +166,38 @@ def parse_args() -> argparse.Namespace:
         help="重置进度记录，清除所有断点恢复数据，从头处理所有文件",
     )
 
+    parser.add_argument(
+        "--generate-summary",
+        action="store_true",
+        default=False,
+        help="独立生成项目概要并写入长期记忆（不执行注释生成）",
+    )
+
+    parser.add_argument(
+        "--project-info",
+        default=None,
+        help="项目简要信息文本（如业务背景、核心功能描述等），配合 --generate-summary 使用",
+    )
+
+    parser.add_argument(
+        "--list-memories",
+        action="store_true",
+        default=False,
+        help="列出所有已记忆的项目概要",
+    )
+
+    parser.add_argument(
+        "--remove-memory",
+        action="store_true",
+        default=False,
+        help="删除指定项目的长期记忆",
+    )
+
     args = parser.parse_args()
+
+    # 校验：--list-memories 模式不需要项目路径
+    if args.list_memories:
+        return args
 
     # 校验：非 test-api 模式必须提供项目路径
     if not args.test_api and not args.project_path:
@@ -236,6 +284,125 @@ def do_context_only(project_path: str, refresh: bool) -> bool:
     else:
         logger.error("未能生成项目概要")
         return False
+
+
+def do_generate_summary(project_path: str, project_info: str | None, refresh: bool) -> bool:
+    """
+    独立生成项目概要并写入长期记忆
+
+    接收项目路径和用户提供的项目简要信息，调用大模型生成概要，
+    结果同时写入项目内缓存和全局长期记忆。
+
+    Args:
+        project_path: 项目本地根目录路径
+        project_info: 用户提供的项目简要信息文本（可选）
+        refresh: 是否强制刷新（忽略已有缓存/记忆）
+
+    Returns:
+        是否生成成功
+    """
+    logger.info("=" * 50)
+    logger.info("独立项目概要生成（含长期记忆）")
+    logger.info("=" * 50)
+
+    # 校验配置
+    is_valid, errors = validate_config()
+    if not is_valid:
+        logger.error("配置错误")
+        for err in errors:
+            logger.error(f"  - {err}")
+        return False
+
+    memory_store = ProjectMemoryStore()
+
+    # 如果不强制刷新，先尝试从长期记忆加载
+    if not refresh:
+        memory_entry = memory_store.load_project_summary(project_path)
+        if memory_entry is not None:
+            summary = memory_entry.get("summary", "")
+            logger.info("从长期记忆中加载到已有概要：")
+            logger.info("=" * 50)
+            logger.info(summary)
+            logger.info("=" * 50)
+            logger.info("如需重新生成，请添加 --refresh-context 参数")
+            return True
+
+    # 调用 ProjectContextAnalyzer 生成概要
+    logger.info(f"正在分析项目: {project_path}")
+    if project_info:
+        logger.info(f"用户提供的项目信息: {project_info[:200]}...")
+
+    analyzer = ProjectContextAnalyzer(project_path)
+    summary = analyzer.get_context(force_refresh=True, project_info=project_info)
+
+    if not summary:
+        logger.error("未能生成项目概要")
+        return False
+
+    # 写入长期记忆
+    memory_store.save_project_summary(project_path, summary, project_info)
+
+    logger.info("=" * 50)
+    logger.info("项目概要内容：")
+    logger.info("=" * 50)
+    logger.info(summary)
+    logger.info("=" * 50)
+    logger.info(f"概要已写入长期记忆（{memory_store.store_file}）")
+    return True
+
+
+def do_list_memories() -> None:
+    """
+    列出所有已记忆的项目概要
+    """
+    logger.info("=" * 50)
+    logger.info("已记忆的项目概要列表")
+    logger.info("=" * 50)
+
+    memory_store = ProjectMemoryStore()
+    memories = memory_store.list_project_summaries()
+
+    if not memories:
+        logger.info("长期记忆为空，暂无已记忆的项目。")
+        logger.info(f"存储路径: {memory_store.store_file}")
+        return
+
+    for i, entry in enumerate(memories, 1):
+        import datetime
+        ts = entry.get("timestamp", 0)
+        time_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "未知"
+        project_info = entry.get("project_info")
+        info_label = f" | 用户信息: {project_info[:50]}..." if project_info else ""
+
+        logger.info(f"  {i}. {entry['project_path']}")
+        logger.info(f"     时间: {time_str}{info_label}")
+        logger.info(f"     概要预览: {entry['summary_preview']}")
+        logger.info("")
+
+    logger.info(f"共 {len(memories)} 个项目记忆，存储路径: {memory_store.store_file}")
+
+
+def do_remove_memory(project_path: str) -> bool:
+    """
+    删除指定项目的长期记忆
+
+    Args:
+        project_path: 项目根目录路径
+
+    Returns:
+        是否删除成功
+    """
+    logger.info("=" * 50)
+    logger.info(f"删除项目长期记忆: {project_path}")
+    logger.info("=" * 50)
+
+    memory_store = ProjectMemoryStore()
+    success = memory_store.remove_project_summary(project_path)
+    if success:
+        logger.info("删除成功")
+    else:
+        logger.error("删除失败")
+    return success
 
 
 def _mark_completed_dirs(source_files: list[SourceFile], tracker: ProgressTracker) -> None:
@@ -336,21 +503,36 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
 
     logger.info(reader.get_project_summary(source_files))
 
-    # 第三步（可选）：项目上下文分析
+    # 第三步（可选）：项目上下文分析（集成长期记忆）
     project_context = None
     if use_context:
         step += 1
         logger.info(f"[{step}/{total_steps}] 分析项目上下文...")
-        try:
-            analyzer = ProjectContextAnalyzer(project_path)
-            project_context = analyzer.get_context(force_refresh=refresh_context)
-            if project_context:
-                logger.info("  项目上下文加载成功 ✓")
-            else:
-                logger.warning("  项目上下文不可用，将以无上下文模式继续")
-        except Exception as e:
-            logger.warning(f"  项目上下文分析失败: {e}")
-            logger.warning("  将以无上下文模式继续")
+
+        # 优先从长期记忆加载项目概要
+        memory_store = ProjectMemoryStore()
+        if not refresh_context:
+            memory_entry = memory_store.load_project_summary(project_path)
+            if memory_entry is not None:
+                project_context = memory_entry.get("summary")
+                if project_context:
+                    logger.info("  项目上下文从长期记忆加载成功 ✓")
+
+        # 如果长期记忆中无概要，退回自动分析
+        if project_context is None:
+            try:
+                analyzer = ProjectContextAnalyzer(project_path)
+                project_context = analyzer.get_context(force_refresh=refresh_context)
+                if project_context:
+                    logger.info("  项目上下文分析成功 ✓")
+                    # 新生成的概要自动写入长期记忆
+                    memory_store.save_project_summary(project_path, project_context)
+                    logger.info("  概要已同步写入长期记忆")
+                else:
+                    logger.warning("  项目上下文不可用，将以无上下文模式继续")
+            except Exception as e:
+                logger.warning(f"  项目上下文分析失败: {e}")
+                logger.warning("  将以无上下文模式继续")
 
     # 第 N 步：生成注释
     step += 1
@@ -424,6 +606,11 @@ def main() -> None:
         success = do_test_api()
         sys.exit(0 if success else 1)
 
+    # 列出所有长期记忆模式（不需要项目路径）
+    if args.list_memories:
+        do_list_memories()
+        return
+
     project_path = args.project_path
 
     # 校验项目路径
@@ -435,6 +622,20 @@ def main() -> None:
     if args.scan_only:
         do_scan_only(project_path)
         return
+
+    # 删除长期记忆模式
+    if args.remove_memory:
+        success = do_remove_memory(project_path)
+        sys.exit(0 if success else 1)
+
+    # 独立生成项目概要模式
+    if args.generate_summary:
+        success = do_generate_summary(
+            project_path,
+            project_info=args.project_info,
+            refresh=args.refresh_context,
+        )
+        sys.exit(0 if success else 1)
 
     # 仅生成上下文模式
     if args.context_only:

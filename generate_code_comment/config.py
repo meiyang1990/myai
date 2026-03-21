@@ -185,6 +185,17 @@ CONTEXT_CACHE_EXPIRE_DAYS = float(os.getenv("CONTEXT_CACHE_EXPIRE_DAYS", "7"))
 CONTEXT_CACHE_DIR_NAME = os.getenv("CONTEXT_CACHE_DIR_NAME", ".code_context")
 
 
+# ========== 长期记忆存储配置 ==========
+
+# 长期记忆存储目录（默认在用户 HOME 目录下）
+MEMORY_STORE_DIR = os.path.expanduser(
+    os.getenv("MEMORY_STORE_DIR", "~/.code_comment_memory")
+)
+
+# 长期记忆存储文件名
+MEMORY_STORE_FILE = os.getenv("MEMORY_STORE_FILE", "project_summaries.json")
+
+
 # ========== 注释风格配置 ==========
 
 # 各编程语言的注释格式模板
