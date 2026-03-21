@@ -5,11 +5,17 @@
 基于 LangChain + 火山引擎大模型，自动为源码文件生成高质量中文注释。
 支持项目上下文分析，让大模型理解项目全局架构后生成更有深度的注释。
 
+核心参数说明：
+    --project_root_dir  项目根目录路径，仅用于检索项目概要信息（长期记忆/上下文分析）、
+                        加载 .gitignore 规则、以及进度缓存存放。不参与注释生成的核心处理。
+    --source_path       实际要处理的源码路径（文件或目录），为注释生成的核心处理对象。
+                        输出目录默认基于此参数计算。
+
 使用方式：
     python main.py <子命令> [参数...]
 
 子命令：
-    generate_comment   为项目源码生成中文注释
+    generate_comment   为源码生成中文注释（基于 --source_path 处理）
     generate_summary   生成项目概要并写入长期记忆
     test_api           测试火山引擎 API 连接
     scan_only          仅扫描并列出将处理的文件
@@ -18,14 +24,20 @@
     remove_memory      删除指定项目的长期记忆
 
 示例：
-    # 为项目生成中文注释（输出到新目录）
-    python main.py generate_comment --project_root_dir /path/to/your/project
+    # 为项目某个子目录生成中文注释（输出到 <source_path>_commented）
+    python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src
+
+    # 为单个文件生成中文注释
+    python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src/Main.java
 
     # 指定输出目录
-    python main.py generate_comment --project_root_dir /path/to/your/project -o /path/to/output
+    python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src -o /path/to/output
 
-    # 覆盖原文件（谨慎使用）
-    python main.py generate_comment --project_root_dir /path/to/your/project --overwrite
+    # 覆盖原文件（直接写回 --source_path 原位，谨慎使用）
+    python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src --overwrite
+
+    # 强制重新处理所有文件（忽略进度记录，即使之前已处理过也重新生成注释）
+    python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src --force
 
     # 生成项目概要并写入长期记忆（--project-info 为必填参数）
     python main.py generate_summary --project_root_dir /path/to/your/project --project-info "这是一个电商后台管理系统..."
@@ -106,9 +118,11 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python main.py generate_comment --project_root_dir /path/to/project              # 生成注释到新目录
-  python main.py generate_comment --project_root_dir /path/to/project -o ./output  # 指定输出目录
-  python main.py generate_comment --project_root_dir /path/to/project --overwrite  # 覆盖原文件
+  python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src             # 处理子目录（输出到 src_commented）
+  python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src/Main.java   # 处理单文件
+  python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src -o ./output # 指定输出目录
+  python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src --overwrite # 覆盖原文件（写回 source_path 原位）
+  python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src --force    # 强制重新处理（忽略进度记录）
   python main.py generate_summary --project_root_dir /path/to/project --project-info "项目简要信息..."  # 生成项目概要
   python main.py test_api --project_root_dir /path/to/project                      # 测试 API 连接
   python main.py scan_only --project_root_dir /path/to/project                     # 仅扫描预览
@@ -136,20 +150,35 @@ def parse_args() -> argparse.Namespace:
         help="强制刷新，忽略已有缓存/记忆，重新生成概要",
     )
 
-    # ---- generate_comment：为项目源码生成中文注释 ----
+    # ---- generate_comment：为源码生成中文注释 ----
     sp_comment = subparsers.add_parser(
         "generate_comment",
-        help="为项目源码生成中文注释",
-        description="扫描项目源码文件，调用大模型生成高质量中文注释并写入输出目录或覆盖原文件。",
+        help="为源码生成中文注释（基于 --source_path 处理）",
+        description=(
+            "扫描 --source_path 指定的源码文件或目录，调用大模型生成高质量中文注释。"
+            "--project_root_dir 仅用于检索项目概要信息和加载 .gitignore 规则。"
+        ),
     )
-    sp_comment.add_argument("--project_root_dir", required=True, help="项目源码根目录路径")
+    sp_comment.add_argument(
+        "--project_root_dir", required=True,
+        help="项目根目录路径（仅用于检索项目概要/长期记忆、加载 .gitignore 规则和进度缓存存放）",
+    )
+    sp_comment.add_argument(
+        "--source_path", required=True,
+        help=(
+            "要处理的源码路径（文件或目录），为注释生成的核心处理对象。"
+            "必须是 --project_root_dir 的子路径或与其相同。"
+            "目录时递归处理其下所有源码文件，单文件时仅处理该文件。"
+            "默认输出目录基于此参数计算（<source_path>_commented）。"
+        ),
+    )
     sp_comment.add_argument(
         "-o", "--output", default=None,
-        help="输出目录路径（默认为 <项目路径>_commented）",
+        help="输出目录路径（默认为 <source_path>_commented）",
     )
     sp_comment.add_argument(
         "--overwrite", action="store_true", default=False,
-        help="直接覆盖原始文件（谨慎使用，建议先备份）",
+        help="直接覆盖 --source_path 原位文件（谨慎使用，建议先备份）",
     )
     sp_comment.add_argument(
         "--copy-others", action="store_true", default=False,
@@ -166,6 +195,10 @@ def parse_args() -> argparse.Namespace:
     sp_comment.add_argument(
         "--reset-progress", action="store_true", default=False,
         help="重置进度记录，从头处理所有文件",
+    )
+    sp_comment.add_argument(
+        "--force", action="store_true", default=False,
+        help="强制重新处理所有文件和目录，忽略进度记录中已处理的状态（不删除进度文件，处理完成后更新进度）",
     )
 
     # ---- test_api：测试 API 连接 ----
@@ -466,22 +499,44 @@ def _mark_completed_dirs(source_files: list[SourceFile], tracker: ProgressTracke
 
 def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy_others: bool,
                 use_context: bool = True, refresh_context: bool = False,
-                reset_progress: bool = False) -> None:
+                reset_progress: bool = False, target_path: str | None = None,
+                force: bool = False) -> None:
     """
     执行完整的注释生成流程
 
+    参数职责：
+    - project_path: 项目根目录路径，**仅用于**检索项目概要（长期记忆/上下文分析）、
+      加载 .gitignore 规则、以及进度跟踪缓存的存放基准
+    - target_path: 实际要处理的源码路径（文件或目录），为注释生成的核心处理对象
+
     Args:
-        project_path: 项目根目录路径
+        project_path: 项目根目录路径（用于元信息检索和 .gitignore 加载）
         output_dir: 输出目录
         overwrite: 是否覆盖原文件
         copy_others: 是否复制非源码文件
         use_context: 是否使用项目上下文分析（默认 True）
         refresh_context: 是否强制刷新项目上下文（默认 False）
         reset_progress: 是否重置进度记录（默认 False）
+        target_path: 要处理的源码路径（文件或目录），为 None 时默认使用 project_path
+        force: 是否强制重新处理所有文件（忽略进度记录，默认 False）
     """
     logger.info("=" * 50)
     logger.info("智能代码注释生成器")
+    if force:
+        logger.info("  --force 模式：忽略进度记录，强制重新处理所有文件")
     logger.info("=" * 50)
+
+    # 确定实际处理路径（--source_path 为核心处理对象）
+    effective_target = target_path if target_path else project_path
+    is_single_file = os.path.isfile(effective_target)
+
+    if is_single_file:
+        logger.info(f"模式: 单文件处理")
+        logger.info(f"目标文件: {effective_target}")
+    else:
+        logger.info(f"模式: 目录递归处理")
+        logger.info(f"目标目录: {effective_target}")
+    logger.info(f"项目根目录（元信息）: {project_path}")
 
     total_steps = 5 if use_context else 4
     step = 0
@@ -497,16 +552,23 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
         sys.exit(1)
     logger.info("  配置校验通过 ✓")
 
-    # 初始化进度跟踪器
+    # 初始化进度跟踪器（基于 project_path，进度以项目为单位管理）
     tracker = ProgressTracker(project_path)
     if reset_progress:
         tracker.reset()
 
-    # 第二步：扫描项目
+    # 第二步：扫描源码
+    # SourceReader 基于 project_path 初始化（加载 .gitignore），但扫描 target_path
+    # --force 模式下不传 progress_tracker，这样扫描时不会跳过已完成目录
     step += 1
-    logger.info(f"[{step}/{total_steps}] 扫描项目源码...")
+    logger.info(f"[{step}/{total_steps}] 扫描源码...")
     reader = SourceReader(project_path)
-    source_files = reader.scan(progress_tracker=tracker)
+
+    if is_single_file:
+        source_files = reader.scan_path(effective_target)
+    else:
+        scan_tracker = None if force else tracker
+        source_files = reader.scan_path(effective_target, progress_tracker=scan_tracker)
 
     if not source_files:
         logger.info("  未发现可处理的源码文件，退出。")
@@ -515,6 +577,7 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
     logger.info(reader.get_project_summary(source_files))
 
     # 第三步（可选）：项目上下文分析（集成长期记忆）
+    # 项目概要基于 project_path 检索，这是 --project_root_dir 的核心用途
     project_context = None
     if use_context:
         step += 1
@@ -546,10 +609,11 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
                 raise
 
     # 第 N 步：生成注释
+    # CommentWriter 基于 effective_target 初始化（输出路径以 source_path 为基准）
     step += 1
     logger.info(f"[{step}/{total_steps}] 调用大模型生成注释...")
     generator = CommentGenerator(project_context=project_context)
-    writer = CommentWriter(project_path, output_dir, overwrite)
+    writer = CommentWriter(effective_target, output_dir, overwrite)
 
     total = len(source_files)
     start_time = time.time()
@@ -558,8 +622,8 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
     for idx, sf in enumerate(source_files, 1):
         progress = f"[{idx}/{total}]"
 
-        # 断点恢复：检查文件是否已处理过
-        if tracker.is_file_done(sf.rel_path):
+        # 断点恢复：检查文件是否已处理过（--force 模式跳过此检查）
+        if not force and tracker.is_file_done(sf.rel_path):
             skipped_by_progress += 1
             logger.info(f"{progress} [跳过-已处理] {sf.rel_path}")
             continue
@@ -638,6 +702,26 @@ def _handle_generate_comment(args: argparse.Namespace) -> None:
     """generate_comment 子命令处理"""
     _validate_project_path(args.project_root_dir)
 
+    # 校验 --source_path：必须存在且为文件或目录
+    source_path = os.path.abspath(args.source_path)
+    if not os.path.exists(source_path):
+        logger.error(f"--source_path 路径不存在: {source_path}")
+        sys.exit(1)
+    if not os.path.isfile(source_path) and not os.path.isdir(source_path):
+        logger.error(f"--source_path 既不是文件也不是目录: {source_path}")
+        sys.exit(1)
+
+    # 校验 --source_path 必须是 --project_root_dir 的子路径或同一路径
+    real_source = os.path.realpath(source_path)
+    real_project_root = os.path.realpath(args.project_root_dir)
+    if real_source != real_project_root and not real_source.startswith(real_project_root + os.sep):
+        logger.error(
+            f"--source_path 必须是 --project_root_dir 的子路径或与其相同。\n"
+            f"  --project_root_dir (解析后): {real_project_root}\n"
+            f"  --source_path      (解析后): {real_source}"
+        )
+        sys.exit(1)
+
     # 覆盖模式下给出警告
     if args.overwrite:
         logger.warning("覆盖模式将直接修改原始源码文件！")
@@ -655,6 +739,8 @@ def _handle_generate_comment(args: argparse.Namespace) -> None:
         use_context=not args.no_context,
         refresh_context=args.refresh_context,
         reset_progress=args.reset_progress,
+        target_path=source_path,
+        force=args.force,
     )
 
 

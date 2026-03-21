@@ -33,6 +33,8 @@ try:
 except ImportError:
     HAS_PATHSPEC = False
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class SourceFile:
@@ -324,6 +326,93 @@ class SourceReader:
 
         logger.info(f"[扫描完成] 共发现 {len(source_files)} 个源码文件")
         return source_files
+
+    def scan_path(self, target_path: str,
+                  progress_tracker: "ProgressTracker | None" = None) -> list[SourceFile]:
+        """
+        扫描指定路径（文件或目录），返回可处理的源码文件列表
+
+        当 target_path 为单个文件时，直接将该文件作为唯一待处理文件返回。
+        当 target_path 为目录时，递归扫描该目录下的所有源码文件和子目录。
+
+        Args:
+            target_path: 要处理的路径（文件或目录的绝对路径）
+            progress_tracker: ProgressTracker 实例，用于目录级断点跳过（可选）
+
+        Returns:
+            源码文件对象列表
+
+        Raises:
+            ValueError: 当路径不存在、文件类型不支持或不可访问时
+        """
+        abs_target = os.path.abspath(target_path)
+
+        if os.path.isfile(abs_target):
+            # ---------- 单文件模式 ----------
+            file_name = os.path.basename(abs_target)
+
+            # 检测编程语言
+            language = self._detect_language(file_name)
+            if language is None:
+                raise ValueError(
+                    f"不支持的文件类型: {file_name}，"
+                    f"已支持的扩展名: {', '.join(sorted(self.language_map.keys()))}"
+                )
+
+            # 检查文件大小
+            file_size = os.path.getsize(abs_target)
+            if file_size > MAX_FILE_SIZE:
+                raise ValueError(
+                    f"文件过大 ({file_size} bytes > {MAX_FILE_SIZE} bytes): {abs_target}"
+                )
+            if file_size == 0:
+                logger.warning(f"文件为空，跳过: {abs_target}")
+                return []
+
+            # 读取文件内容
+            content = self._read_file_content(abs_target)
+            if content is None:
+                logger.warning(f"无法读取文件: {abs_target}")
+                return []
+
+            # 计算相对于 project_root 的相对路径
+            try:
+                rel_path = os.path.relpath(abs_target, self.project_root)
+            except ValueError:
+                # 当文件不在 project_root 下时（例如不同盘符），使用文件名
+                rel_path = file_name
+
+            source_file = SourceFile(
+                abs_path=abs_target,
+                rel_path=rel_path,
+                language=language,
+                content=content,
+                size=file_size,
+            )
+            logger.info(f"[扫描完成] 单文件模式: {rel_path} ({language})")
+            return [source_file]
+
+        elif os.path.isdir(abs_target):
+            # ---------- 目录模式 ----------
+            source_files: list[SourceFile] = []
+
+            # 计算目录相对于 project_root 的相对路径
+            try:
+                rel_dir = os.path.relpath(abs_target, self.project_root)
+            except ValueError:
+                rel_dir = ""
+
+            # 如果目标目录就是 project_root，rel_dir 为 "."，需要转为 ""
+            if rel_dir == ".":
+                rel_dir = ""
+
+            self._scan_directory(abs_target, rel_dir, source_files, progress_tracker)
+
+            logger.info(f"[扫描完成] 共发现 {len(source_files)} 个源码文件")
+            return source_files
+
+        else:
+            raise ValueError(f"路径不存在或不可访问: {abs_target}")
 
     def get_project_summary(self, source_files: list[SourceFile]) -> str:
         """

@@ -231,47 +231,59 @@ export MAX_TOKENS="4096"
 
 ```bash
 # 1. 测试 API 连接
-python main.py test_api
+python main.py test_api --project_root_dir /path/to/project
 
 # 2. 扫描项目（预览将处理哪些文件）
-python main.py scan_only /path/to/your/project
+python main.py scan_only --project_root_dir /path/to/project
 
-# 3. 生成注释（输出到新目录，不影响原文件）
-python main.py generate_comment /path/to/your/project
+# 3. 为项目子目录生成注释（输出到 <source_path>_commented）
+python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src
 
-# 4. 指定输出目录
-python main.py generate_comment /path/to/your/project -o /path/to/output
+# 4. 为单个文件生成注释
+python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src/Main.java
 
-# 5. 直接覆盖原文件（谨慎使用，建议先 git commit）
-python main.py generate_comment /path/to/your/project --overwrite
+# 5. 指定输出目录
+python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src -o /path/to/output
 
-# 6. 同时复制非源码文件到输出目录
-python main.py generate_comment /path/to/your/project --copy-others
+# 6. 直接覆盖原文件（谨慎使用，建议先 git commit）
+python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src --overwrite
 
-# 7. 生成项目概要并写入长期记忆
-python main.py generate_summary /path/to/your/project
+# 7. 强制重新处理所有文件（忽略进度记录）
+python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src --force
 
-# 8. 生成概要时附带项目简要信息（提升概要质量）
-python main.py generate_summary /path/to/your/project --project-info "这是一个电商后台管理系统..."
+# 8. 同时复制非源码文件到输出目录
+python main.py generate_comment --project_root_dir /path/to/project --source_path /path/to/project/src --copy-others
 
-# 9. 列出所有已记忆的项目概要
-python main.py list_memories
+# 9. 生成项目概要并写入长期记忆
+python main.py generate_summary --project_root_dir /path/to/project --project-info "这是一个电商后台管理系统..."
 
-# 10. 删除指定项目的长期记忆
-python main.py remove_memory /path/to/your/project
+# 10. 列出所有已记忆的项目概要
+python main.py list_memories --project_root_dir /path/to/project
+
+# 11. 删除指定项目的长期记忆
+python main.py remove_memory --project_root_dir /path/to/project
 ```
 
 ### 子命令说明
 
 | 子命令 | 说明 | 必需参数 | 可选参数 |
 |--------|------|---------|---------|
-| `generate_comment` | 为项目源码生成中文注释 | `project_path` | `-o/--output`, `--overwrite`, `--copy-others`, `--no-context`, `--refresh-context`, `--reset-progress` |
-| `generate_summary` | 生成项目概要并写入长期记忆 | `project_path` | `--project-info`, `--refresh-context` |
-| `test_api` | 测试火山引擎 API 连接 | 无 | 无 |
-| `scan_only` | 仅扫描并列出将处理的文件 | `project_path` | 无 |
-| `context_only` | 仅生成项目上下文概要 | `project_path` | `--refresh-context` |
-| `list_memories` | 列出所有已记忆的项目概要 | 无 | 无 |
-| `remove_memory` | 删除指定项目的长期记忆 | `project_path` | 无 |
+| `generate_comment` | 为源码生成中文注释 | `--project_root_dir`, `--source_path` | `-o/--output`, `--overwrite`, `--copy-others`, `--no-context`, `--refresh-context`, `--reset-progress`, `--force` |
+| `generate_summary` | 生成项目概要并写入长期记忆 | `--project_root_dir` | `--project-info`, `--refresh-context` |
+| `test_api` | 测试火山引擎 API 连接 | `--project_root_dir` | 无 |
+| `scan_only` | 仅扫描并列出将处理的文件 | `--project_root_dir` | 无 |
+| `context_only` | 仅生成项目上下文概要 | `--project_root_dir` | `--refresh-context` |
+| `list_memories` | 列出所有已记忆的项目概要 | `--project_root_dir` | 无 |
+| `remove_memory` | 删除指定项目的长期记忆 | `--project_root_dir` | 无 |
+
+### 核心参数说明
+
+| 参数 | 适用子命令 | 说明 |
+|------|-----------|------|
+| `--project_root_dir` | 所有子命令 | 项目根目录路径，用于检索项目概要、加载 `.gitignore`、存放进度缓存 |
+| `--source_path` | `generate_comment` | 实际要处理的源码路径（文件或目录），必须是 `--project_root_dir` 的子路径或同一路径 |
+| `--force` | `generate_comment` | 忽略进度记录，强制重新处理所有文件（不删除进度文件） |
+| `--reset-progress` | `generate_comment` | 删除进度文件，从零开始处理 |
 
 ### 技术栈
 
