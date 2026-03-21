@@ -84,8 +84,7 @@ class CommentWriter:
                 os.makedirs(output_dir)
             except OSError as e:
                 logger.error(f"创建目录失败 {output_dir}: {e}")
-                self.fail_count += 1
-                return False
+                raise
 
         # 写入文件
         try:
@@ -97,8 +96,7 @@ class CommentWriter:
 
         except OSError as e:
             logger.error(f"写入文件失败 {output_path}: {e}")
-            self.fail_count += 1
-            return False
+            raise
 
     def copy_non_source_files(self, source_files: list[SourceFile]) -> None:
         """
@@ -152,13 +150,15 @@ class CommentWriter:
                 if not os.path.exists(dst_dir):
                     try:
                         os.makedirs(dst_dir)
-                    except OSError:
-                        continue
+                    except OSError as e:
+                        logger.error(f"创建目录失败 {dst_dir}: {e}")
+                        raise
 
                 try:
                     shutil.copy2(src_path, dst_path)
-                except OSError:
-                    pass
+                except OSError as e:
+                    logger.error(f"复制文件失败 {src_path} -> {dst_path}: {e}")
+                    raise
 
     def get_summary(self) -> str:
         """

@@ -6,44 +6,44 @@
 支持项目上下文分析，让大模型理解项目全局架构后生成更有深度的注释。
 
 使用方式：
-    python main.py <项目路径> [选项]
+    python main.py <子命令> [参数...]
+
+子命令：
+    generate_comment   为项目源码生成中文注释
+    generate_summary   生成项目概要并写入长期记忆
+    test_api           测试火山引擎 API 连接
+    scan_only          仅扫描并列出将处理的文件
+    context_only       仅生成项目上下文概要
+    list_memories      列出所有已记忆的项目概要
+    remove_memory      删除指定项目的长期记忆
 
 示例：
-    # 基本用法：扫描项目并生成注释到新目录（自动分析项目上下文）
-    python main.py /path/to/your/project
+    # 为项目生成中文注释（输出到新目录）
+    python main.py generate_comment /path/to/your/project
 
     # 指定输出目录
-    python main.py /path/to/your/project -o /path/to/output
+    python main.py generate_comment /path/to/your/project -o /path/to/output
 
     # 覆盖原文件（谨慎使用）
-    python main.py /path/to/your/project --overwrite
+    python main.py generate_comment /path/to/your/project --overwrite
 
-    # 仅测试 API 连接
-    python main.py --test-api
+    # 生成项目概要并写入长期记忆（--project-info 为必填参数）
+    python main.py generate_summary /path/to/your/project --project-info "这是一个电商后台管理系统..."
+
+    # 测试 API 连接
+    python main.py test_api
 
     # 仅扫描不生成（预览将处理哪些文件）
-    python main.py /path/to/your/project --scan-only
+    python main.py scan_only /path/to/your/project
 
-    # 强制刷新项目上下文概要
-    python main.py /path/to/your/project --refresh-context
-
-    # 仅生成项目上下文概要（不执行注释生成）
-    python main.py /path/to/your/project --context-only
-
-    # 跳过项目上下文分析（兼容旧行为）
-    python main.py /path/to/your/project --no-context
-
-    # 独立生成项目概要并写入长期记忆
-    python main.py /path/to/your/project --generate-summary
-
-    # 独立生成项目概要，附带用户提供的项目简要信息
-    python main.py /path/to/your/project --generate-summary --project-info "这是一个电商后台管理系统..."
+    # 仅生成项目上下文概要
+    python main.py context_only /path/to/your/project
 
     # 列出所有已记忆的项目概要
-    python main.py --list-memories
+    python main.py list_memories
 
     # 删除指定项目的长期记忆
-    python main.py /path/to/your/project --remove-memory
+    python main.py remove_memory /path/to/your/project
 """
 
 from __future__ import annotations
@@ -53,13 +53,14 @@ import os
 import argparse
 import logging
 import time
+from typing import Callable
 
 # 将当前脚本所在目录加入 sys.path，确保模块导入正常
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
-from config import validate_config, setup_logging
+from config import validate_config, setup_logging, LOG_FILE
 from source_reader import SourceReader, SourceFile
 from comment_generator import CommentGenerator
 from comment_writer import CommentWriter
@@ -70,138 +71,151 @@ from memory_store import ProjectMemoryStore
 logger = logging.getLogger(__name__)
 
 
+def _log_summary_to_file(project_path: str, summary: str) -> None:
+    """
+    将项目概要信息完整写入日志文件
+
+    以清晰的分隔格式逐行写入，方便在日志文件中定位和阅读。
+
+    Args:
+        project_path: 项目根目录路径
+        summary: 项目概要文本
+    """
+    logger.info("=" * 60)
+    logger.info(f"[项目概要] 项目路径: {project_path}")
+    logger.info("=" * 60)
+    for line in summary.splitlines():
+        logger.info(line)
+    logger.info("=" * 60)
+    logger.info("[项目概要] END")
+    logger.info("=" * 60)
+
+
 def parse_args() -> argparse.Namespace:
     """
-    解析命令行参数
+    解析命令行参数（基于 subparsers 子命令路由）
+
+    使用 argparse.add_subparsers 将各功能注册为独立子命令，
+    每个子命令只声明自己需要的参数，调用方式更清晰。
 
     Returns:
-        argparse.Namespace: 解析后的参数对象
+        argparse.Namespace: 解析后的参数对象，包含 method 字段标识子命令
     """
     parser = argparse.ArgumentParser(
         description="智能代码注释生成器 - 基于 AI 自动为源码添加中文注释",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python main.py /path/to/project              # 生成注释到新目录（自动分析上下文）
-  python main.py /path/to/project -o ./output   # 指定输出目录
-  python main.py /path/to/project --overwrite   # 覆盖原文件
-  python main.py --test-api                     # 测试 API 连接
-  python main.py /path/to/project --scan-only   # 仅扫描预览
-  python main.py /path/to/project --context-only          # 仅生成上下文概要
-  python main.py /path/to/project --refresh-context        # 强制刷新上下文
-  python main.py /path/to/project --no-context             # 跳过上下文分析
-  python main.py /path/to/project --generate-summary       # 独立生成项目概要并写入长期记忆
-  python main.py /path/to/project --generate-summary --project-info "项目简要信息..."
-  python main.py --list-memories                            # 列出所有长期记忆
-  python main.py /path/to/project --remove-memory           # 删除指定项目记忆
+  python main.py generate_comment /path/to/project              # 生成注释到新目录
+  python main.py generate_comment /path/to/project -o ./output  # 指定输出目录
+  python main.py generate_comment /path/to/project --overwrite  # 覆盖原文件
+  python main.py generate_summary /path/to/project --project-info "项目简要信息..."  # 生成项目概要（--project-info 必填）
+  python main.py test_api                                       # 测试 API 连接
+  python main.py scan_only /path/to/project                     # 仅扫描预览
+  python main.py context_only /path/to/project                  # 仅生成上下文概要
+  python main.py list_memories                                  # 列出所有长期记忆
+  python main.py remove_memory /path/to/project                 # 删除指定项目记忆
         """,
     )
 
-    parser.add_argument(
-        "project_path",
-        nargs="?",
-        default=None,
-        help="目标项目的根目录路径",
+    subparsers = parser.add_subparsers(dest="method", help="指定要执行的方法")
+
+    # ---- generate_summary：生成项目概要并写入长期记忆 ----
+    sp_summary = subparsers.add_parser(
+        "generate_summary",
+        help="生成项目概要并写入长期记忆",
+        description="分析项目源码结构，调用大模型生成项目概要，结果同时写入项目缓存和全局长期记忆。",
+    )
+    sp_summary.add_argument("project_path", help="项目本地根目录路径")
+    sp_summary.add_argument(
+        "--project-info", required=True,
+        help="项目简要信息文本（如业务背景、核心功能描述等），可提升概要质量",
+    )
+    sp_summary.add_argument(
+        "--refresh-context", action="store_true", default=False,
+        help="强制刷新，忽略已有缓存/记忆，重新生成概要",
     )
 
-    parser.add_argument(
-        "-o", "--output",
-        default=None,
+    # ---- generate_comment：为项目源码生成中文注释 ----
+    sp_comment = subparsers.add_parser(
+        "generate_comment",
+        help="为项目源码生成中文注释",
+        description="扫描项目源码文件，调用大模型生成高质量中文注释并写入输出目录或覆盖原文件。",
+    )
+    sp_comment.add_argument("project_path", help="项目本地根目录路径")
+    sp_comment.add_argument(
+        "-o", "--output", default=None,
         help="输出目录路径（默认为 <项目路径>_commented）",
     )
-
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        default=False,
+    sp_comment.add_argument(
+        "--overwrite", action="store_true", default=False,
         help="直接覆盖原始文件（谨慎使用，建议先备份）",
     )
-
-    parser.add_argument(
-        "--scan-only",
-        action="store_true",
-        default=False,
-        help="仅扫描并列出将处理的文件，不生成注释",
-    )
-
-    parser.add_argument(
-        "--test-api",
-        action="store_true",
-        default=False,
-        help="测试火山引擎 API 连接是否正常",
-    )
-
-    parser.add_argument(
-        "--copy-others",
-        action="store_true",
-        default=False,
+    sp_comment.add_argument(
+        "--copy-others", action="store_true", default=False,
         help="在输出模式下，同时复制非源码文件到输出目录",
     )
-
-    parser.add_argument(
-        "--refresh-context",
-        action="store_true",
-        default=False,
-        help="强制重新分析项目，刷新项目上下文概要缓存",
+    sp_comment.add_argument(
+        "--no-context", action="store_true", default=False,
+        help="跳过项目上下文分析，使用无上下文模式生成注释",
+    )
+    sp_comment.add_argument(
+        "--refresh-context", action="store_true", default=False,
+        help="强制刷新项目上下文概要缓存",
+    )
+    sp_comment.add_argument(
+        "--reset-progress", action="store_true", default=False,
+        help="重置进度记录，从头处理所有文件",
     )
 
-    parser.add_argument(
-        "--context-only",
-        action="store_true",
-        default=False,
-        help="仅生成项目上下文概要并存储，不执行注释生成",
+    # ---- test_api：测试 API 连接 ----
+    subparsers.add_parser(
+        "test_api",
+        help="测试火山引擎 API 连接是否正常",
+        description="向火山引擎大模型发送测试请求，验证 API Key 和 Endpoint 配置是否正确。",
     )
 
-    parser.add_argument(
-        "--no-context",
-        action="store_true",
-        default=False,
-        help="跳过项目上下文分析，使用无上下文模式生成注释（兼容旧行为）",
+    # ---- scan_only：仅扫描项目 ----
+    sp_scan = subparsers.add_parser(
+        "scan_only",
+        help="仅扫描并列出将处理的文件",
+        description="递归扫描项目目录，列出所有将被处理的源码文件，不执行注释生成。",
+    )
+    sp_scan.add_argument("project_path", help="项目本地根目录路径")
+
+    # ---- context_only：仅生成项目上下文概要 ----
+    sp_ctx = subparsers.add_parser(
+        "context_only",
+        help="仅生成项目上下文概要",
+        description="分析项目结构并生成上下文概要，不执行注释生成。",
+    )
+    sp_ctx.add_argument("project_path", help="项目本地根目录路径")
+    sp_ctx.add_argument(
+        "--refresh-context", action="store_true", default=False,
+        help="强制刷新，忽略已有缓存",
     )
 
-    parser.add_argument(
-        "--reset-progress",
-        action="store_true",
-        default=False,
-        help="重置进度记录，清除所有断点恢复数据，从头处理所有文件",
-    )
-
-    parser.add_argument(
-        "--generate-summary",
-        action="store_true",
-        default=False,
-        help="独立生成项目概要并写入长期记忆（不执行注释生成）",
-    )
-
-    parser.add_argument(
-        "--project-info",
-        default=None,
-        help="项目简要信息文本（如业务背景、核心功能描述等），配合 --generate-summary 使用",
-    )
-
-    parser.add_argument(
-        "--list-memories",
-        action="store_true",
-        default=False,
+    # ---- list_memories：列出所有长期记忆 ----
+    subparsers.add_parser(
+        "list_memories",
         help="列出所有已记忆的项目概要",
+        description="读取全局长期记忆存储，列出所有已保存的项目概要信息。",
     )
 
-    parser.add_argument(
-        "--remove-memory",
-        action="store_true",
-        default=False,
+    # ---- remove_memory：删除指定项目的长期记忆 ----
+    sp_rm = subparsers.add_parser(
+        "remove_memory",
         help="删除指定项目的长期记忆",
+        description="从全局长期记忆中移除指定项目的概要记录。",
     )
+    sp_rm.add_argument("project_path", help="项目本地根目录路径")
 
     args = parser.parse_args()
 
-    # 校验：--list-memories 模式不需要项目路径
-    if args.list_memories:
-        return args
-
-    # 校验：非 test-api 模式必须提供项目路径
-    if not args.test_api and not args.project_path:
-        parser.error("请提供目标项目路径，或使用 --test-api 测试 API 连接")
+    # 未指定子命令时打印帮助并退出
+    if args.method is None:
+        parser.print_help()
+        sys.exit(1)
 
     return args
 
@@ -295,7 +309,7 @@ def do_generate_summary(project_path: str, project_info: str | None, refresh: bo
 
     Args:
         project_path: 项目本地根目录路径
-        project_info: 用户提供的项目简要信息文本（可选）
+        project_info: 用户提供的项目简要信息文本（必填）
         refresh: 是否强制刷新（忽略已有缓存/记忆）
 
     Returns:
@@ -321,9 +335,7 @@ def do_generate_summary(project_path: str, project_info: str | None, refresh: bo
         if memory_entry is not None:
             summary = memory_entry.get("summary", "")
             logger.info("从长期记忆中加载到已有概要：")
-            logger.info("=" * 50)
-            logger.info(summary)
-            logger.info("=" * 50)
+            _log_summary_to_file(project_path, summary)
             logger.info("如需重新生成，请添加 --refresh-context 参数")
             return True
 
@@ -342,11 +354,8 @@ def do_generate_summary(project_path: str, project_info: str | None, refresh: bo
     # 写入长期记忆
     memory_store.save_project_summary(project_path, summary, project_info)
 
-    logger.info("=" * 50)
-    logger.info("项目概要内容：")
-    logger.info("=" * 50)
-    logger.info(summary)
-    logger.info("=" * 50)
+    # 将完整概要写入日志文件
+    _log_summary_to_file(project_path, summary)
     logger.info(f"概要已写入长期记忆（{memory_store.store_file}）")
     return True
 
@@ -531,8 +540,8 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
                 else:
                     logger.warning("  项目上下文不可用，将以无上下文模式继续")
             except Exception as e:
-                logger.warning(f"  项目上下文分析失败: {e}")
-                logger.warning("  将以无上下文模式继续")
+                logger.error(f"项目上下文分析失败: {e}")
+                raise
 
     # 第 N 步：生成注释
     step += 1
@@ -594,67 +603,50 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
     logger.info(f"平均每个文件: {elapsed / total if total > 0 else 0:.1f} 秒")
 
 
-def main() -> None:
+def _validate_project_path(project_path: str) -> None:
     """
-    主程序入口
+    校验项目路径是否存在且为目录
+
+    Args:
+        project_path: 项目根目录路径
+
+    Raises:
+        SystemExit: 路径不存在或不是目录时退出
     """
-    setup_logging()
-    args = parse_args()
-
-    # 测试 API 模式
-    if args.test_api:
-        success = do_test_api()
-        sys.exit(0 if success else 1)
-
-    # 列出所有长期记忆模式（不需要项目路径）
-    if args.list_memories:
-        do_list_memories()
-        return
-
-    project_path = args.project_path
-
-    # 校验项目路径
     if not os.path.isdir(project_path):
         logger.error(f"项目路径不存在或不是目录: {project_path}")
         sys.exit(1)
 
-    # 仅扫描模式
-    if args.scan_only:
-        do_scan_only(project_path)
-        return
 
-    # 删除长期记忆模式
-    if args.remove_memory:
-        success = do_remove_memory(project_path)
-        sys.exit(0 if success else 1)
+def _handle_generate_summary(args: argparse.Namespace) -> None:
+    """generate_summary 子命令处理"""
+    _validate_project_path(args.project_path)
+    success = do_generate_summary(
+        args.project_path,
+        project_info=args.project_info,
+        refresh=args.refresh_context,
+    )
+    if success:
+        log_path = os.path.abspath(LOG_FILE)
+        print(f"[generate_summary] 项目概要已写入日志文件: {log_path}")
+    sys.exit(0 if success else 1)
 
-    # 独立生成项目概要模式
-    if args.generate_summary:
-        success = do_generate_summary(
-            project_path,
-            project_info=args.project_info,
-            refresh=args.refresh_context,
-        )
-        sys.exit(0 if success else 1)
 
-    # 仅生成上下文模式
-    if args.context_only:
-        success = do_context_only(project_path, refresh=args.refresh_context)
-        sys.exit(0 if success else 1)
+def _handle_generate_comment(args: argparse.Namespace) -> None:
+    """generate_comment 子命令处理"""
+    _validate_project_path(args.project_path)
 
     # 覆盖模式下给出警告
     if args.overwrite:
         logger.warning("覆盖模式将直接修改原始源码文件！")
         logger.warning("建议在执行前先备份项目或使用 Git 管理版本。")
         confirm = input("确认继续? (y/N): ")
-
         if confirm.strip().lower() != "y":
             logger.info("已取消操作。")
             return
 
-    # 执行注释生成（根据 --no-context 决定是否使用上下文）
     do_generate(
-        project_path,
+        args.project_path,
         args.output,
         args.overwrite,
         args.copy_others,
@@ -662,6 +654,67 @@ def main() -> None:
         refresh_context=args.refresh_context,
         reset_progress=args.reset_progress,
     )
+
+
+def _handle_test_api(args: argparse.Namespace) -> None:
+    """test_api 子命令处理"""
+    success = do_test_api()
+    sys.exit(0 if success else 1)
+
+
+def _handle_scan_only(args: argparse.Namespace) -> None:
+    """scan_only 子命令处理"""
+    _validate_project_path(args.project_path)
+    do_scan_only(args.project_path)
+
+
+def _handle_context_only(args: argparse.Namespace) -> None:
+    """context_only 子命令处理"""
+    _validate_project_path(args.project_path)
+    success = do_context_only(args.project_path, refresh=args.refresh_context)
+    sys.exit(0 if success else 1)
+
+
+def _handle_list_memories(args: argparse.Namespace) -> None:
+    """list_memories 子命令处理"""
+    do_list_memories()
+
+
+def _handle_remove_memory(args: argparse.Namespace) -> None:
+    """remove_memory 子命令处理"""
+    _validate_project_path(args.project_path)
+    success = do_remove_memory(args.project_path)
+    sys.exit(0 if success else 1)
+
+
+# 方法分派表：子命令名 -> 处理函数
+METHOD_DISPATCH: dict[str, Callable[[argparse.Namespace], None]] = {
+    "generate_summary": _handle_generate_summary,
+    "generate_comment": _handle_generate_comment,
+    "test_api": _handle_test_api,
+    "scan_only": _handle_scan_only,
+    "context_only": _handle_context_only,
+    "list_memories": _handle_list_memories,
+    "remove_memory": _handle_remove_memory,
+}
+
+
+def main() -> None:
+    """
+    主程序入口
+
+    基于 argparse subparsers 子命令路由，通过 METHOD_DISPATCH 分派表
+    将各子命令映射到对应的处理函数。
+    """
+    setup_logging()
+    args = parse_args()
+
+    handler = METHOD_DISPATCH.get(args.method)
+    if handler is None:
+        logger.error(f"未知的方法: {args.method}")
+        sys.exit(1)
+
+    handler(args)
 
 
 if __name__ == "__main__":

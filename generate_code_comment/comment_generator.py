@@ -169,7 +169,7 @@ class CommentGenerator:
 
         except Exception as e:
             logger.error(f"生成注释失败 ({file_path}): {e}")
-            return None
+            raise
 
     def _clean_response(self, text: str | None) -> str | None:
         """
@@ -221,4 +221,5 @@ class CommentGenerator:
             else:
                 return False, "API 返回为空"
         except Exception as e:
-            return False, f"API 连接失败: {e}"
+            logger.error(f"API 连接失败: {e}")
+            raise

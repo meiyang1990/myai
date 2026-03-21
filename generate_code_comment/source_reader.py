@@ -113,8 +113,9 @@ class SourceReader:
                 lines = f.readlines()
             spec = pathspec.PathSpec.from_lines("gitwildmatch", lines)
             return spec
-        except Exception:
-            return None
+        except Exception as e:
+            logger.error(f"解析 .gitignore 失败 ({gitignore_path}): {e}")
+            raise
 
     def _should_ignore_dir(self, dir_name: str, rel_dir_path: str) -> bool:
         """
@@ -204,8 +205,9 @@ class SourceReader:
             with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
             return content
-        except OSError:
-            return None
+        except OSError as e:
+            logger.error(f"读取文件失败 ({file_path}): {e}")
+            raise
 
     def _scan_directory(self, dir_path: str, rel_dir: str, result: list[SourceFile],
                         progress_tracker: "ProgressTracker | None" = None) -> None:
@@ -225,8 +227,9 @@ class SourceReader:
 
         try:
             entries = os.listdir(dir_path)
-        except OSError:
-            return
+        except OSError as e:
+            logger.error(f"列出目录失败 ({dir_path}): {e}")
+            raise
 
         # 分离文件和子目录
         files = []
@@ -260,8 +263,9 @@ class SourceReader:
             # 检查文件大小
             try:
                 file_size = os.path.getsize(abs_file)
-            except OSError:
-                continue
+            except OSError as e:
+                logger.error(f"获取文件大小失败 ({abs_file}): {e}")
+                raise
 
             if file_size > MAX_FILE_SIZE:
                 logger.warning(f"[跳过] 文件过大({file_size} bytes): {rel_file}")

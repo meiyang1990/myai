@@ -36,6 +36,8 @@ from config import (
     CONTEXT_CACHE_DIR_NAME,
 )
 
+logger = logging.getLogger(__name__)
+
 
 # ========== 采样优先级定义 ==========
 
@@ -582,8 +584,9 @@ class ProjectContextAnalyzer:
 
                 try:
                     file_size = os.path.getsize(abs_path)
-                except OSError:
-                    file_size = 0
+                except OSError as e:
+                    logger.error(f"获取文件大小失败 ({abs_path}): {e}")
+                    raise
 
                 candidates.append((score, file_size, rel_path, abs_path))
 

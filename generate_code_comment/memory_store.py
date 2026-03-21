@@ -77,8 +77,8 @@ class ProjectMemoryStore:
             with open(self.store_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"读取长期记忆文件失败: {e}")
-            return {}
+            logger.error(f"读取长期记忆文件失败: {e}")
+            raise
 
     def _save_store(self, store: dict) -> bool:
         """

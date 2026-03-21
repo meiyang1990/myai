@@ -3,36 +3,39 @@
 项目配置模块 - 管理所有配置参数和环境变量
 
 本模块负责：
-1. 从 .env 文件或环境变量中加载火山引擎 API 配置
+1. 从操作系统环境变量中加载火山引擎 API 配置（大模型相关参数）
 2. 定义文件扫描的过滤规则（忽略目录、文件扩展名映射等）
 3. 提供全局配置常量供其他模块使用
+
+大模型相关参数需在操作系统环境变量中预先设置，例如：
+    export VOLCENGINE_API_KEY="your-api-key"
+    export VOLCENGINE_API_BASE="https://ark.cn-beijing.volces.com/api/coding/v3"
+    export VOLCENGINE_MODEL_ENDPOINT="your-endpoint-id"
+    export TEMPERATURE="0.3"
+    export MAX_TOKENS="4096"
 """
 
 import os
 import logging
-from dotenv import load_dotenv
-
-# 加载 .env 文件中的环境变量
-load_dotenv()
 
 
-# ========== 火山引擎 API 配置 ==========
+# ========== 火山引擎 API 配置（从操作系统环境变量获取） ==========
 
-# 火山引擎 API Key，用于身份认证
-VOLCENGINE_API_KEY = os.getenv("VOLCENGINE_API_KEY", "")
+# 火山引擎 API Key，用于身份认证（必须通过环境变量设置）
+VOLCENGINE_API_KEY = os.environ.get("VOLCENGINE_API_KEY", "")
 
 # 火山引擎 API 基础地址（兼容 OpenAI 协议）
-VOLCENGINE_API_BASE = os.getenv(
+VOLCENGINE_API_BASE = os.environ.get(
     "VOLCENGINE_API_BASE",
     "https://ark.cn-beijing.volces.com/api/coding/v3"
 )
 
-# 火山引擎推理接入点 ID（模型 endpoint）
-VOLCENGINE_MODEL_ENDPOINT = os.getenv("VOLCENGINE_MODEL_ENDPOINT", "")
+# 火山引擎推理接入点 ID（模型 endpoint，必须通过环境变量设置）
+VOLCENGINE_MODEL_ENDPOINT = os.environ.get("VOLCENGINE_MODEL_ENDPOINT", "")
 
-# 大模型生成参数
-TEMPERATURE = float(os.getenv("TEMPERATURE", "0.3"))
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4096"))
+# 大模型生成参数（通过环境变量设置，有默认值）
+TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.3"))
+MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "4096"))
 
 
 # ========== 文件扫描配置 ==========
@@ -164,36 +167,36 @@ DEFAULT_IGNORE_FILES = {
 }
 
 # 文件大小上限（字节），超过此大小的文件跳过（默认 1MB）
-MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(1024 * 1024)))
+MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(1024 * 1024)))
 
 
 # ========== 项目上下文分析配置 ==========
 
 # 智能采样文件数量上限（默认 20 个）
-CONTEXT_SAMPLE_FILE_LIMIT = int(os.getenv("CONTEXT_SAMPLE_FILE_LIMIT", "20"))
+CONTEXT_SAMPLE_FILE_LIMIT = int(os.environ.get("CONTEXT_SAMPLE_FILE_LIMIT", "20"))
 
 # 采样文件的总字符预算（默认约 8000 字符 ≈ 4000 token）
-CONTEXT_CHAR_BUDGET = int(os.getenv("CONTEXT_CHAR_BUDGET", "8000"))
+CONTEXT_CHAR_BUDGET = int(os.environ.get("CONTEXT_CHAR_BUDGET", "8000"))
 
 # 单个采样文件截取的最大行数（默认 200 行）
-CONTEXT_FILE_MAX_LINES = int(os.getenv("CONTEXT_FILE_MAX_LINES", "200"))
+CONTEXT_FILE_MAX_LINES = int(os.environ.get("CONTEXT_FILE_MAX_LINES", "200"))
 
 # 项目概要缓存有效期（天），超过后提示用户刷新（默认 7 天）
-CONTEXT_CACHE_EXPIRE_DAYS = float(os.getenv("CONTEXT_CACHE_EXPIRE_DAYS", "7"))
+CONTEXT_CACHE_EXPIRE_DAYS = float(os.environ.get("CONTEXT_CACHE_EXPIRE_DAYS", "7"))
 
 # 项目上下文缓存目录名称
-CONTEXT_CACHE_DIR_NAME = os.getenv("CONTEXT_CACHE_DIR_NAME", ".code_context")
+CONTEXT_CACHE_DIR_NAME = os.environ.get("CONTEXT_CACHE_DIR_NAME", ".code_context")
 
 
 # ========== 长期记忆存储配置 ==========
 
 # 长期记忆存储目录（默认在用户 HOME 目录下）
 MEMORY_STORE_DIR = os.path.expanduser(
-    os.getenv("MEMORY_STORE_DIR", "~/.code_comment_memory")
+    os.environ.get("MEMORY_STORE_DIR", "~/.code_comment_memory")
 )
 
 # 长期记忆存储文件名
-MEMORY_STORE_FILE = os.getenv("MEMORY_STORE_FILE", "project_summaries.json")
+MEMORY_STORE_FILE = os.environ.get("MEMORY_STORE_FILE", "project_summaries.json")
 
 
 # ========== 注释风格配置 ==========
@@ -314,10 +317,10 @@ COMMENT_STYLES = {
 # ========== 日志配置 ==========
 
 # 日志文件路径（默认工作目录下的 generate_code_comment.log）
-LOG_FILE = os.getenv("LOG_FILE", "generate_code_comment.log")
+LOG_FILE = os.environ.get("LOG_FILE", "generate_code_comment.log")
 
 # 日志级别（默认 INFO，可通过环境变量 LOG_LEVEL 调整）
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
 
 def setup_logging() -> None:
@@ -359,17 +362,19 @@ def validate_config() -> tuple[bool, list[str]]:
 
     if not VOLCENGINE_API_KEY:
         errors.append(
-            "未设置 VOLCENGINE_API_KEY，请在 .env 文件或环境变量中配置"
+            "未设置 VOLCENGINE_API_KEY，请在操作系统环境变量中配置，例如: export VOLCENGINE_API_KEY=\"your-api-key\""
         )
 
     if not VOLCENGINE_MODEL_ENDPOINT:
         errors.append(
-            "未设置 VOLCENGINE_MODEL_ENDPOINT，请在 .env 文件或环境变量中配置推理接入点 ID"
+            "未设置 VOLCENGINE_MODEL_ENDPOINT，请在操作系统环境变量中配置推理接入点 ID，"
+            "例如: export VOLCENGINE_MODEL_ENDPOINT=\"ep-xxx\""
         )
 
     if not VOLCENGINE_API_BASE:
         errors.append(
-            "未设置 VOLCENGINE_API_BASE，请在 .env 文件或环境变量中配置 API 地址"
+            "未设置 VOLCENGINE_API_BASE，请在操作系统环境变量中配置 API 地址，"
+            "例如: export VOLCENGINE_API_BASE=\"https://ark.cn-beijing.volces.com/api/coding/v3\""
         )
 
     is_valid = len(errors) == 0

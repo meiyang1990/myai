@@ -34,12 +34,16 @@ pip install -r requirements.txt
 echo ""
 echo "✓ 所有依赖安装完成！"
 
-# 5. 检查 .env
-if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+# 5. 检查环境变量配置
+if [ -z "$VOLCENGINE_API_KEY" ] || [ -z "$VOLCENGINE_MODEL_ENDPOINT" ]; then
     echo ""
-    echo "⚠ 未检测到 .env 文件，请基于 .env.example 创建："
-    echo "  cp .env.example .env"
-    echo "  然后填入你的 API Key"
+    echo "⚠ 未检测到大模型相关环境变量，请先设置："
+    echo "  export VOLCENGINE_API_KEY=\"your-api-key\""
+    echo "  export VOLCENGINE_API_BASE=\"https://ark.cn-beijing.volces.com/api/coding/v3\""
+    echo "  export VOLCENGINE_MODEL_ENDPOINT=\"your-endpoint-id\""
+    echo ""
+    echo "  建议将以上内容添加到 ~/.bashrc 或 ~/.zshrc 中"
+    echo "  详细说明请参考 .env.example 文件"
 fi
 
 echo ""

@@ -174,6 +174,7 @@ class ProgressTracker:
                 logger.info("已清除所有进度记录")
             except OSError as e:
                 logger.error(f"删除进度文件失败: {e}")
+                raise
         else:
             logger.info("无进度记录需要清除")
 

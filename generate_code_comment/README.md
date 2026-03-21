@@ -210,77 +210,68 @@ pip install -r requirements.txt
 
 ### 配置火山引擎 API
 
-1. 复制环境变量模板：
+本项目所有大模型相关参数均从**操作系统环境变量**中读取。请在 shell 中设置以下环境变量：
 
 ```bash
-cp .env.example .env
+# 必填参数 - 在 ~/.bashrc 或 ~/.zshrc 中添加
+export VOLCENGINE_API_KEY="your-api-key-here"
+export VOLCENGINE_API_BASE="https://ark.cn-beijing.volces.com/api/coding/v3"
+export VOLCENGINE_MODEL_ENDPOINT="ep-20240901xxxxx-xxxxx"
+
+# 可选参数（有默认值）
+export TEMPERATURE="0.3"
+export MAX_TOKENS="4096"
 ```
 
-2. 编辑 `.env` 文件，填写你的火山引擎配置：
+设置后执行 `source ~/.bashrc` 或 `source ~/.zshrc` 使其生效。
 
-```bash
-# 火山引擎 API Key（在火山引擎控制台获取）
-VOLCENGINE_API_KEY=your-api-key-here
-
-# API 地址（默认即可）
-VOLCENGINE_API_BASE=https://ark.cn-beijing.volces.com/api/v3
-
-# 推理接入点 ID（在火山方舟控制台 -> 在线推理 -> 创建推理接入点后获取）
-VOLCENGINE_MODEL_ENDPOINT=ep-20240901xxxxx-xxxxx
-```
+> 💡 完整的环境变量说明请参考 `.env.example` 文件。
 
 ### 快速开始
 
 ```bash
 # 1. 测试 API 连接
-python main.py --test-api
+python main.py test_api
 
 # 2. 扫描项目（预览将处理哪些文件）
-python main.py /path/to/your/project --scan-only
+python main.py scan_only /path/to/your/project
 
 # 3. 生成注释（输出到新目录，不影响原文件）
-python main.py /path/to/your/project
+python main.py generate_comment /path/to/your/project
 
 # 4. 指定输出目录
-python main.py /path/to/your/project -o /path/to/output
+python main.py generate_comment /path/to/your/project -o /path/to/output
 
 # 5. 直接覆盖原文件（谨慎使用，建议先 git commit）
-python main.py /path/to/your/project --overwrite
+python main.py generate_comment /path/to/your/project --overwrite
 
 # 6. 同时复制非源码文件到输出目录
-python main.py /path/to/your/project --copy-others
+python main.py generate_comment /path/to/your/project --copy-others
 
-# 7. 独立生成项目概要并写入长期记忆
-python main.py /path/to/your/project --generate-summary
+# 7. 生成项目概要并写入长期记忆
+python main.py generate_summary /path/to/your/project
 
 # 8. 生成概要时附带项目简要信息（提升概要质量）
-python main.py /path/to/your/project --generate-summary --project-info "这是一个电商后台管理系统..."
+python main.py generate_summary /path/to/your/project --project-info "这是一个电商后台管理系统..."
 
 # 9. 列出所有已记忆的项目概要
-python main.py --list-memories
+python main.py list_memories
 
 # 10. 删除指定项目的长期记忆
-python main.py /path/to/your/project --remove-memory
+python main.py remove_memory /path/to/your/project
 ```
 
-### 命令行参数说明
+### 子命令说明
 
-| 参数 | 说明 |
-|------|------|
-| `project_path` | 目标项目的根目录路径 |
-| `-o, --output` | 输出目录路径（默认为 `<项目路径>_commented`） |
-| `--overwrite` | 直接覆盖原始文件（谨慎使用） |
-| `--scan-only` | 仅扫描并列出将处理的文件 |
-| `--test-api` | 测试火山引擎 API 连接 |
-| `--copy-others` | 在输出模式下同时复制非源码文件 |
-| `--context-only` | 仅生成项目上下文概要（不执行注释生成） |
-| `--refresh-context` | 强制刷新项目上下文概要 |
-| `--no-context` | 跳过项目上下文分析 |
-| `--reset-progress` | 重置进度记录，从头处理所有文件 |
-| `--generate-summary` | 独立生成项目概要并写入长期记忆（不执行注释生成） |
-| `--project-info` | 项目简要信息文本，配合 `--generate-summary` 使用 |
-| `--list-memories` | 列出所有已记忆的项目概要 |
-| `--remove-memory` | 删除指定项目的长期记忆 |
+| 子命令 | 说明 | 必需参数 | 可选参数 |
+|--------|------|---------|---------|
+| `generate_comment` | 为项目源码生成中文注释 | `project_path` | `-o/--output`, `--overwrite`, `--copy-others`, `--no-context`, `--refresh-context`, `--reset-progress` |
+| `generate_summary` | 生成项目概要并写入长期记忆 | `project_path` | `--project-info`, `--refresh-context` |
+| `test_api` | 测试火山引擎 API 连接 | 无 | 无 |
+| `scan_only` | 仅扫描并列出将处理的文件 | `project_path` | 无 |
+| `context_only` | 仅生成项目上下文概要 | `project_path` | `--refresh-context` |
+| `list_memories` | 列出所有已记忆的项目概要 | 无 | 无 |
+| `remove_memory` | 删除指定项目的长期记忆 | `project_path` | 无 |
 
 ### 技术栈
 
