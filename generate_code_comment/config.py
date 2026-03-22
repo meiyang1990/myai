@@ -41,13 +41,10 @@ MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "4096"))
 # ========== 文件扫描配置 ==========
 
 # 支持的源码文件扩展名 -> 编程语言映射
+# 注意：前端源码文件（.js/.jsx/.ts/.tsx/.css/.vue）已移除，不生成中文注释
 LANGUAGE_EXTENSIONS = {
     ".java": "Java",
     ".py": "Python",
-    ".js": "JavaScript",
-    ".ts": "TypeScript",
-    ".tsx": "TypeScript",
-    ".jsx": "JavaScript",
     ".go": "Go",
     ".kt": "Kotlin",
     ".kts": "Kotlin",
@@ -62,7 +59,6 @@ LANGUAGE_EXTENSIONS = {
     ".swift": "Swift",
     ".scala": "Scala",
     ".php": "PHP",
-    ".vue": "Vue",
     ".sh": "Shell",
     ".bash": "Shell",
 }
@@ -119,15 +115,7 @@ TEST_FILE_PATTERNS = [
     "*_test.py",
     # Go
     "*_test.go",
-    # JavaScript / TypeScript
-    "*.test.js",
-    "*.test.ts",
-    "*.test.tsx",
-    "*.test.jsx",
-    "*.spec.js",
-    "*.spec.ts",
-    "*.spec.tsx",
-    "*.spec.jsx",
+    # JavaScript / TypeScript 测试模式已移除（前端文件整体不再处理）
     # Kotlin
     "*Test.kt",
     "*Tests.kt",
@@ -204,11 +192,10 @@ MEMORY_BASE_DIR = os.path.join(
 COMMENTED_MARKER_TEXT = "这个文件已经全部加上中文注释"
 
 # 各编程语言的单行注释前缀映射（用于生成和检测标记行）
+# 注意：前端语言（JavaScript/TypeScript/Vue）已移除
 _SINGLE_LINE_COMMENT_PREFIX = {
     "Java": "//",
     "Python": "#",
-    "JavaScript": "//",
-    "TypeScript": "//",
     "Go": "//",
     "Kotlin": "//",
     "C": "//",
@@ -221,7 +208,6 @@ _SINGLE_LINE_COMMENT_PREFIX = {
     "Swift": "//",
     "Scala": "//",
     "PHP": "//",
-    "Vue": "//",
     "Shell": "#",
 }
 
@@ -281,18 +267,6 @@ COMMENT_STYLES = {
         "file_comment_line": "",
         "file_comment_end": '"""',
         "inline_comment": "# ",
-    },
-    "JavaScript": {
-        "file_comment_start": "/**",
-        "file_comment_line": " * ",
-        "file_comment_end": " */",
-        "inline_comment": "// ",
-    },
-    "TypeScript": {
-        "file_comment_start": "/**",
-        "file_comment_line": " * ",
-        "file_comment_end": " */",
-        "inline_comment": "// ",
     },
     "Go": {
         "file_comment_start": "//",
@@ -364,12 +338,6 @@ COMMENT_STYLES = {
         "file_comment_start": "/**",
         "file_comment_line": " * ",
         "file_comment_end": " */",
-        "inline_comment": "// ",
-    },
-    "Vue": {
-        "file_comment_start": "<!--",
-        "file_comment_line": "  ",
-        "file_comment_end": "-->",
         "inline_comment": "// ",
     },
     "Shell": {
