@@ -190,13 +190,12 @@ CONTEXT_CACHE_DIR_NAME = os.environ.get("CONTEXT_CACHE_DIR_NAME", ".code_context
 
 # ========== 长期记忆存储配置 ==========
 
-# 长期记忆存储目录（默认在用户 HOME 目录下）
-MEMORY_STORE_DIR = os.path.expanduser(
-    os.environ.get("MEMORY_STORE_DIR", "~/.code_comment_memory")
+# 长期记忆存储根目录：所有项目的记忆统一存储在程序运行目录下的 memory/ 目录中
+# 每个 --project_root_dir 在此目录下创建独立的子目录来隔离存储
+MEMORY_BASE_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    os.environ.get("MEMORY_BASE_DIR", "memory"),
 )
-
-# 长期记忆存储文件名
-MEMORY_STORE_FILE = os.environ.get("MEMORY_STORE_FILE", "project_summaries.json")
 
 
 # ========== 已注释标记配置 ==========

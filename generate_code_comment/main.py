@@ -362,7 +362,7 @@ def do_generate_summary(project_path: str, project_info: str | None, refresh: bo
             logger.error(f"  - {err}")
         return False
 
-    memory_store = ProjectMemoryStore()
+    memory_store = ProjectMemoryStore(project_path)
 
     # 如果不强制刷新，先尝试从长期记忆加载
     if not refresh:
@@ -391,24 +391,27 @@ def do_generate_summary(project_path: str, project_info: str | None, refresh: bo
 
     # 将完整概要写入日志文件
     _log_summary_to_file(project_path, summary)
-    logger.info(f"概要已写入长期记忆（{memory_store.store_file}）")
+    logger.info(f"概要已写入长期记忆（{memory_store.project_memory_dir}）")
     return True
 
 
-def do_list_memories() -> None:
+def do_list_memories(project_path: str) -> None:
     """
     列出所有已记忆的项目概要
+
+    Args:
+        project_path: 项目根目录路径（用于初始化 ProjectMemoryStore）
     """
     logger.info("=" * 50)
     logger.info("已记忆的项目概要列表")
     logger.info("=" * 50)
 
-    memory_store = ProjectMemoryStore()
+    memory_store = ProjectMemoryStore(project_path)
     memories = memory_store.list_project_summaries()
 
     if not memories:
         logger.info("长期记忆为空，暂无已记忆的项目。")
-        logger.info(f"存储路径: {memory_store.store_file}")
+        logger.info(f"存储路径: {memory_store.base_dir}")
         return
 
     for i, entry in enumerate(memories, 1):
@@ -421,9 +424,10 @@ def do_list_memories() -> None:
         logger.info(f"  {i}. {entry['project_path']}")
         logger.info(f"     时间: {time_str}{info_label}")
         logger.info(f"     概要预览: {entry['summary_preview']}")
+        logger.info(f"     记忆目录: {entry.get('memory_dir', 'N/A')}")
         logger.info("")
 
-    logger.info(f"共 {len(memories)} 个项目记忆，存储路径: {memory_store.store_file}")
+    logger.info(f"共 {len(memories)} 个项目记忆，存储根目录: {memory_store.base_dir}")
 
 
 def do_remove_memory(project_path: str) -> bool:
@@ -440,7 +444,7 @@ def do_remove_memory(project_path: str) -> bool:
     logger.info(f"删除项目长期记忆: {project_path}")
     logger.info("=" * 50)
 
-    memory_store = ProjectMemoryStore()
+    memory_store = ProjectMemoryStore(project_path)
     success = memory_store.remove_project_summary(project_path)
     if success:
         logger.info("删除成功")
@@ -584,7 +588,7 @@ def do_generate(project_path: str, output_dir: str | None, overwrite: bool, copy
         logger.info(f"[{step}/{total_steps}] 分析项目上下文...")
 
         # 优先从长期记忆加载项目概要
-        memory_store = ProjectMemoryStore()
+        memory_store = ProjectMemoryStore(project_path)
         if not refresh_context:
             memory_entry = memory_store.load_project_summary(project_path)
             if memory_entry is not None:
@@ -777,7 +781,7 @@ def _handle_context_only(args: argparse.Namespace) -> None:
 def _handle_list_memories(args: argparse.Namespace) -> None:
     """list_memories 子命令处理"""
     _validate_project_path(args.project_root_dir)
-    do_list_memories()
+    do_list_memories(args.project_root_dir)
 
 
 def _handle_remove_memory(args: argparse.Namespace) -> None:
