@@ -19,7 +19,7 @@
 
 ### Requirement: 编程语言识别
 
-系统 SHALL 根据文件扩展名自动识别源码文件的编程语言，支持 20+ 种编程语言。
+系统 SHALL 根据文件扩展名自动识别源码文件的编程语言，支持后端和系统编程语言。前端源码文件（JavaScript、TypeScript、CSS、Vue）不在支持范围内，扫描阶段将自动跳过。
 
 #### Scenario: 识别 Java 项目文件
 
@@ -36,11 +36,15 @@
 - **WHEN** 扫描到不在语言映射表中的文件（如 `.txt`、`.md`、`.json`）
 - **THEN** 自动跳过该文件
 
----
+#### Scenario: 跳过前端源码文件
+
+- **WHEN** 扫描到 `.js`、`.jsx`、`.ts`、`.tsx`、`.css`、`.vue` 扩展名的文件
+- **THEN** 自动跳过该文件，不纳入注释处理范围
+- **AND** 原因为前端源码文件不在本工具的注释生成目标范围内
 
 ### Requirement: 文件过滤
 
-系统 SHALL 自动过滤非源码文件（构建产物、依赖目录、配置文件等）和单元测试代码文件，只保留需要添加注释的业务源码文件。
+系统 SHALL 自动过滤非源码文件（构建产物、依赖目录、配置文件等）、单元测试代码文件和前端源码文件，只保留需要添加注释的后端/系统级业务源码文件。
 
 #### Scenario: 过滤构建产物
 
@@ -60,7 +64,7 @@
 #### Scenario: 过滤单元测试文件
 
 - **WHEN** 扫描到符合单元测试文件命名规则的文件
-- **AND** 文件名匹配以下模式之一：`Test*.java`、`*Test.java`、`*Tests.java`、`*Spec.java`、`test_*.py`、`*_test.py`、`*_test.go`、`*.test.js`、`*.test.ts`、`*.test.tsx`、`*.spec.js`、`*.spec.ts`、`*.spec.tsx`
+- **AND** 文件名匹配以下模式之一：`Test*.java`、`*Test.java`、`*Tests.java`、`*Spec.java`、`test_*.py`、`*_test.py`、`*_test.go`
 - **THEN** 跳过该文件，不纳入注释处理范围
 - **AND** 打印跳过提示说明原因为"测试文件"
 
@@ -68,6 +72,12 @@
 
 - **WHEN** 扫描到名称为 `test`、`tests`、`__tests__`、`spec`、`specs` 的目录
 - **THEN** 跳过该目录及其所有子文件，不纳入注释处理范围
+
+#### Scenario: 前端源码文件自动排除
+
+- **WHEN** 扫描到 `.js`、`.jsx`、`.ts`、`.tsx`、`.css`、`.vue` 扩展名的文件
+- **THEN** 因扩展名不在 `LANGUAGE_EXTENSIONS` 映射表中，自动跳过
+- **AND** 不调用大模型，不消耗 Token 额度
 
 ### Requirement: 文件内容加载
 
